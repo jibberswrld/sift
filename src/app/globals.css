@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/*
+  Sift tokens. Direction: warm editorial index (Granola's paper and serif, Linear's dense hairline rows).
+  Every neutral is tinted hue 75. Primary buttons are ink. One accent, vermilion, spent on "needs you" and links only.
+  Muted text is an alpha ladder of the one ink. Radii: controls 6px, panels 10px.
+  Signature: the sorter's reasoning set as a serif margin note, and the serif briefing line that opens the inbox.
+*/
+:root {
+  --bg: oklch(0.977 0.005 75);
+  --sidebar: oklch(0.961 0.007 75);
+  --surface: oklch(0.994 0.003 75);
+  --surface-2: oklch(0.946 0.008 75);
+  --ink: oklch(0.215 0.01 65);
+  --line: oklch(0.215 0.01 65 / 0.085);
+  --line-strong: oklch(0.215 0.01 65 / 0.15);
+  --accent: oklch(0.215 0.01 65);
+  --accent-hover: oklch(0.33 0.012 65);
+  --accent-ink: oklch(0.985 0.004 75);
+  --accent-text: oklch(0.555 0.17 34);
+  --warn: oklch(0.53 0.12 70);
+  --danger: oklch(0.53 0.19 27);
+  --ok: oklch(0.52 0.11 155);
+  --shadow: 0 1px 2px oklch(0.3 0.03 65 / 0.05), 0 3px 10px -4px oklch(0.3 0.03 65 / 0.07);
+  --shadow-lg: 0 1px 2px oklch(0.3 0.03 65 / 0.05), 0 12px 32px -12px oklch(0.3 0.03 65 / 0.09), 0 32px 64px -32px oklch(0.3 0.03 65 / 0.09);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(0.185 0.006 65);
+    --sidebar: oklch(0.17 0.006 65);
+    --surface: oklch(0.21 0.007 65);
+    --surface-2: oklch(0.245 0.008 65);
+    --ink: oklch(0.935 0.008 75);
+    --line: oklch(0.935 0.008 75 / 0.08);
+    --line-strong: oklch(0.935 0.008 75 / 0.14);
+    --accent: oklch(0.935 0.008 75);
+    --accent-hover: oklch(0.85 0.01 75);
+    --accent-ink: oklch(0.185 0.006 65);
+    --accent-text: oklch(0.72 0.15 38);
+    --warn: oklch(0.78 0.12 75);
+    --danger: oklch(0.7 0.17 27);
+    --ok: oklch(0.74 0.12 155);
+    --shadow: 0 0 0 1px oklch(1 0 0 / 0.04);
+    --shadow-lg: 0 0 0 1px oklch(1 0 0 / 0.06), 0 24px 48px -16px oklch(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root {
+  --ink-2: color-mix(in oklab, var(--ink) 78%, transparent);
+  --muted: color-mix(in oklab, var(--ink) 54%, transparent);
+  --faint: color-mix(in oklab, var(--ink) 36%, transparent);
+  --accent-soft: color-mix(in oklab, var(--accent-text) 11%, transparent);
+  --warn-soft: color-mix(in oklab, var(--warn) 13%, transparent);
+  --danger-soft: color-mix(in oklab, var(--danger) 10%, transparent);
+  --ok-soft: color-mix(in oklab, var(--ok) 12%, transparent);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-sidebar: var(--sidebar);
+  --font-serif: var(--font-serif-display);
+  --shadow-card: var(--shadow);
+  --shadow-float: var(--shadow-lg);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius-lg: 6px;
+  --radius-xl: 10px;
+}
+
+html {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 450;
+  font-feature-settings: "ss01", "cv11";
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, color-mix(in oklab, var(--surface-2) 55%, var(--surface)) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
