@@ -1,33 +1,25 @@
--- Sift schema. Runs on every start (src/lib/server/db.ts), so every statement is idempotent.
-
+-- Sift schema. Runs once per server process (src/lib/server/db.ts), so every statement is idempotent.
 
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   publik_handle text unique,
   timezone text,
-  own_key_enc text,
-  own_base_url text,
-  own_model text,
   created_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
   last_active_day date,
   context text not null default '', -- what matters to the person, in their words
-  last_sync_at timestamptz
+  last_sync_at timestamptz,
+  synced jsonb not null default '{}'::jsonb -- per account: when it was last read up to
 );
-alter table users add column if not exists synced jsonb not null default '{}'::jsonb; -- per account: when it was last read up to
 
 create table if not exists sessions (
   id text primary key, -- sha256(cookie value)
   user_id uuid references users(id) on delete cascade,
-  install_id uuid not null,
-  telemetry_id uuid not null,
-  os text not null default 'linux',
-  publik_key_enc text,
-  publik_base_url text,
+  install_id uuid not null, -- this session's publik install
+  publik_key_enc text, -- this session's publik key, encrypted with APP_SECRET
   claim_url text,
   claim_state text not null default 'anonymous',
   wallet_checked_at timestamptz,
-  ai_choice text,
   last_app_opened_at timestamptz,
   last_active_session_at timestamptz,
   created_at timestamptz not null default now(),

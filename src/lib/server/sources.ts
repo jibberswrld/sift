@@ -1,5 +1,5 @@
-// Reading from and replying through each connected account. Every call goes through the hosted connector
-// (connector.ts), which holds the Composio key and allowlists exactly these tools.
+// Reading from and replying through each connected account. Every call goes through connector.ts,
+// which holds the Composio key on the server and allowlists exactly these tools.
 import type { Toolkit } from "@/lib/types";
 import { connectorRun, type ConnectorResult } from "./connector";
 import type { Row } from "./db";
@@ -42,9 +42,9 @@ const date = (v: unknown) => {
 
 type Fetched = ConnectorResult<Incoming[]>;
 
-async function gmail(since: Date): Promise<Fetched> {
+async function gmail(user: Row, since: Date): Promise<Fetched> {
   const query = `in:inbox after:${Math.floor(since.getTime() / 1000)}`;
-  const r = await connectorRun("GMAIL_FETCH_EMAILS", { query, max_results: MAX_PER_SOURCE, include_payload: true, verbose: true });
+  const r = await connectorRun(user, "GMAIL_FETCH_EMAILS", { query, max_results: MAX_PER_SOURCE, include_payload: true, verbose: true });
   if (!r.ok) return r;
   const raw = Array.isArray(r.data.data?.messages) ? (r.data.data.messages as Obj[]) : [];
   return {
@@ -62,8 +62,8 @@ async function gmail(since: Date): Promise<Fetched> {
   };
 }
 
-async function outlook(since: Date): Promise<Fetched> {
-  const r = await connectorRun("OUTLOOK_LIST_MESSAGES", {
+async function outlook(user: Row, since: Date): Promise<Fetched> {
+  const r = await connectorRun(user, "OUTLOOK_LIST_MESSAGES", {
     folder: "inbox",
     top: MAX_PER_SOURCE,
     received_date_time_gt: since.toISOString(),
@@ -90,10 +90,10 @@ async function outlook(since: Date): Promise<Fetched> {
   };
 }
 
-async function slack(since: Date): Promise<Fetched> {
+async function slack(user: Row, since: Date): Promise<Fetched> {
   // Slack's after: is a whole UTC day and exclusive, so ask from the day before and filter by ts below.
   const day = new Date(since.getTime() - 86_400_000).toISOString().slice(0, 10);
-  const r = await connectorRun("SLACK_SEARCH_MESSAGES", { query: `after:${day}`, sort: "timestamp", sort_dir: "desc", count: MAX_PER_SOURCE });
+  const r = await connectorRun(user, "SLACK_SEARCH_MESSAGES", { query: `after:${day}`, sort: "timestamp", sort_dir: "desc", count: MAX_PER_SOURCE });
   if (!r.ok) return r;
   const raw = Array.isArray(obj(r.data.data?.messages).matches) ? (obj(r.data.data?.messages).matches as Obj[]) : [];
   return {
@@ -117,7 +117,7 @@ async function slack(since: Date): Promise<Fetched> {
   };
 }
 
-export const FETCH: Record<Toolkit, (since: Date) => Promise<Fetched>> = { gmail, outlook, slack };
+export const FETCH: Record<Toolkit, (user: Row, since: Date) => Promise<Fetched>> = { gmail, outlook, slack };
 
 /** The address inside "Name <a@b.co>" or a bare "a@b.co"; null for a name with no address. */
 export function emailAddress(s: string | null | undefined): string | null {

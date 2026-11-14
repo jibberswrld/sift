@@ -72,7 +72,6 @@ export type GateState =
   | "not_configured" // server has no PUBLIK_APP_TOKEN
   | "unreachable" // publik did not answer
   | "sign_in" // install exists, not claimed yet
-  | "choose" // claimed, USES_AI and no stored choice
   | "ready";
 
 export interface GateInfo {
@@ -81,19 +80,12 @@ export interface GateInfo {
   body: string;
   note: string | null;
   claimUrl: string | null;
-  topUpUrl: string | null;
   handle: string | null;
-  plan: { kind: "none" | "plan" | "pack"; label: string | null } | null;
-  balanceMicros: number | null;
-  choice: "publik" | "own_key" | null;
-  hasPlan: boolean; // plan.kind !== "none" || balance > 0  -> "Connect your plan" else "Get a plan"
 }
 
 export interface Me {
   handle: string | null;
   timezone: string | null;
-  choice: "publik" | "own_key" | null;
-  ownKey: { baseUrl: string; model: string; last4: string } | null;
 }
 
 // Every API error is { error: { code, message, topUpUrl? } } with a non-2xx status.

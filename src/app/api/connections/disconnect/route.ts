@@ -7,8 +7,8 @@ import { requireReady } from "@/lib/server/session";
 
 export const POST = handle(async (req: Request) => {
   const { toolkit } = z.object({ toolkit: z.enum(TOOLKITS as [Toolkit, ...Toolkit[]]) }).parse(await readJson(req));
-  await requireReady();
-  const r = await connectorDisconnect(toolkit);
+  const { user } = await requireReady();
+  const r = await connectorDisconnect(user, toolkit);
   if (!r.ok) throw connectorError(r, toolkit);
-  return json(await loadConnections());
+  return json(await loadConnections(user));
 });

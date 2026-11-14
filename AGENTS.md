@@ -11,10 +11,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## publik API
 - Base URL: https://publikhq.com/api/v1 (OpenAI Chat Completions, Responses, Anthropic Messages)
 - Models: publik-fast, publik-balanced, publik-smart only; never a vendor model name
-- Sign in with publik: the gate (`src/lib/server/gate.ts`, UI `src/components/app/gate.tsx`) runs before any app screen; it also sends usage telemetry (`src/lib/server/publik.ts`)
-- Key: per-install `pk_` from POST /installs, stored at the publik credential path (~/Library/Application Support/publik/apps/sift.json, mode 0600), never sent to the browser; env PUBLIK_API_KEY / PUBLIK_API_BASE_URL override
-- App token: publik-app-token.txt (public by design, committed) or PUBLIK_APP_TOKEN
-- Runs as a local web app (publik local_web): `pnpm install && pnpm build`, then `pnpm start` on 127.0.0.1:3000; data in PGlite under the app-data folder
+- Sift is a hosted web app (listing outputType "hosted_web"), deployed on Vercel project `sift` with Neon Postgres
+- Sign in with publik: the gate (`src/lib/server/gate.ts`, UI `src/components/app/gate.tsx`) runs before any app screen. Every browser session gets its own install key (POST /api/v1/installs), stored encrypted in `sessions.publik_key_enc` with APP_SECRET, never sent to the browser
+- Usage telemetry (app_opened / active_session) goes out with each session's own key, so each signed-in person counts (`src/lib/server/publik.ts`)
+- AI calls are paid by the developer's fellowship credits: PUBLIK_CREDITS_KEY. People never pick a plan
+- App token: PUBLIK_APP_TOKEN env (server only)
 - 402: show error.message plus error.top_up_url only
 - Never print or log a key
 - Docs: https://publikhq.com/llms.txt, https://publikhq.com/developers, https://publikhq.com/skills/api.md

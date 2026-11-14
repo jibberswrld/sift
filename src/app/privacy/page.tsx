@@ -10,15 +10,15 @@ const SECTIONS: [string, string[]][] = [
     [
       "New messages from the accounts you connect (sender, subject, text and a link back to the original), with the summary and pile Sift gave each one.",
       "What you wrote on the What matters page, the corrections you made, and reply drafts.",
-      "Everything is stored on your own computer, in the Sift folder in your app data. Nothing is kept on a Sift server.",
-      "Your publik handle and time zone, and, if you choose to use your own AI key, that key, encrypted.",
-      "Simple usage events (for example \"the inbox was sorted\") without any message content. These stay on your computer too.",
+      "It is kept in Sift's database, linked to your publik account and visible only to you.",
+      "Your publik handle and time zone, and an encrypted publik key for each browser you sign in on.",
+      "Simple usage events (for example \"the inbox was sorted\") without any message content.",
     ],
   ],
   [
     "How your messages are processed",
     [
-      "To sort messages and write drafts, their text is sent to the AI model behind your chosen plan: publik API, or the provider of your own key. publik does not train on requests.",
+      "To sort messages and write drafts, their text is sent to publik API, which Sift pays for. publik does not train on requests.",
       "Message content is treated as data. Instructions inside a message can't make Sift do anything.",
       "Gmail, Outlook and Slack connect through Composio. Sift reads new messages each time it checks, and sends a reply only after you press Send and confirm. It never deletes, archives or changes anything in your accounts. You can disconnect in Settings.",
     ],
@@ -27,7 +27,7 @@ const SECTIONS: [string, string[]][] = [
     "Deleting your data",
     [
       "Remove any correction from the What matters page.",
-      "Settings → Delete everything permanently removes your data from this computer and signs this computer out of publik.",
+      "Settings → Delete everything permanently removes your account and all of its data.",
     ],
   ],
   [

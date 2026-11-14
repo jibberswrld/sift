@@ -23,20 +23,19 @@ Open a message and Sift drafts a short reply from what's in it. Where only you k
 
 - Sift never deletes, archives or changes anything in your accounts. **Done** only hides a message in Sift.
 - Messages are data, never instructions. A message that tries to instruct the AI is flagged and sorted by what it really is.
-- Your inbox is stored on this computer (PGlite in your app-data folder). Message text goes to the AI only to sort it and to write drafts you ask for.
+- Your inbox is stored in Sift's database, only for you. Message text goes to the AI only to sort it and to write drafts you ask for.
+- Free to use: the AI runs on Sift's publik credits, so there is no plan to pick and no key to paste.
 
 ## Run it
 
-Node.js 22+ and pnpm:
+Sift is a hosted web app on Vercel (project `sift`, Neon Postgres). See `.env.example` for the environment it needs.
+
+### Locally, without real accounts
+
+Node.js 22+ and pnpm. With no `DATABASE_URL`, data goes to an embedded PGlite in `SIFT_DATA_DIR`.
 
 ```sh
 pnpm install && pnpm build
-pnpm start          # http://127.0.0.1:3017
-```
-
-### Without real accounts
-
-```sh
 node scripts/mock-connector.mjs   # fake Gmail, Outlook and Slack on :4666
 node scripts/mock-publik.mjs      # fake publik on :4555 (set MOCK_UPSTREAM_* to reach a real model)
 PUBLIK_ORIGIN=http://localhost:4555 PUBLIK_APP_TOKEN=pat_mocktoken CONNECTOR_ORIGIN=http://localhost:4666 SIFT_DATA_DIR=/tmp/sift pnpm start
@@ -47,10 +46,10 @@ PUBLIK_ORIGIN=http://localhost:4555 PUBLIK_APP_TOKEN=pat_mocktoken CONNECTOR_ORI
 ## How it fits together
 
 - `src/lib/server/sources.ts`: reading from and replying through Gmail, Outlook and Slack.
+- `src/lib/server/connector.ts`: Composio on the server, with an allowlist of the five tools Sift may run.
 - `src/lib/server/triage.ts`: the sorter prompt (your context + your corrections + the messages).
 - `src/lib/server/inbox.ts`: sync, re-sort, moving messages, drafts and sending.
-- `src/app/api/connector/*`: the hosted connector. It holds the Composio key, so the app on your computer never does, and it runs only the five allowlisted tools.
-- `src/lib/server/publik.ts`, `gate.ts`: Sign in with publik and usage counting. AI runs on `publik-balanced`, or your own OpenAI-compatible key.
+- `src/lib/server/publik.ts`, `gate.ts`, `session.ts`: Sign in with publik per browser session, usage counting, AI on the developer's credits.
 
 ## License
 

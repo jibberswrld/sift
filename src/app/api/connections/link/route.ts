@@ -9,7 +9,7 @@ import { track } from "@/lib/server/track";
 export const POST = handle(async (req: Request) => {
   const { toolkit } = z.object({ toolkit: z.enum(TOOLKITS as [Toolkit, ...Toolkit[]]) }).parse(await readJson(req));
   const { user, session } = await requireReady();
-  const r = await connectorLink(toolkit);
+  const r = await connectorLink(user, toolkit, new URL(req.url).origin);
   if (!r.ok) throw connectorError(r, toolkit);
   await track("connection_linked", { userId: user.id, sessionId: session.id, props: { toolkit } });
   return json({ url: r.data.url });
