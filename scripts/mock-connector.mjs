@@ -22,6 +22,11 @@ const connected = new Map(); // user -> Set<toolkit>
 let calls = [];
 let failing = false;
 let arrived = [];
+let bulkGmail = [];
+let bulkOutlook = [];
+let disconnectFail = "";
+let outlookOpaque = false;
+let fetches = [];
 
 const send = (res, status, body) => {
   res.writeHead(status, { "content-type": "application/json" });
@@ -100,12 +105,23 @@ const SLACK = () => [
 function run(tool, args, user) {
   if (tool === "GMAIL_FETCH_EMAILS") {
     const after = Number(/after:(\d+)/.exec(args.query || "")?.[1] ?? 0) * 1000;
-    const messages = [...arrived, ...GMAIL()].filter((m) => m._ts > after).slice(0, Number(args.max_results) || 10).map(({ _ts, ...m }) => m);
-    return { messages, nextPageToken: "", resultSizeEstimate: messages.length };
+    const before = Number(/before:(\d+)/.exec(args.query || "")?.[1] ?? Infinity) * 1000;
+    const all = [...arrived, ...bulkGmail, ...GMAIL()].filter((m) => m._ts > after && m._ts < before);
+    const offset = Number(args.page_token) || 0;
+    const page = all.slice(offset, offset + (Number(args.max_results) || 10));
+    const messages = page.map((m) => { const copy = { ...m }; delete copy._ts; return copy; });
+    fetches.push({ tool, offset, count: messages.length });
+    return { messages, nextPageToken: offset + page.length < all.length ? String(offset + page.length) : "", resultSizeEstimate: all.length };
   }
   if (tool === "OUTLOOK_LIST_MESSAGES") {
-    const after = args.received_date_time_gt ? Date.parse(args.received_date_time_gt) : 0;
-    return { "@odata.context": "mock", value: OUTLOOK().filter((m) => Date.parse(m.receivedDateTime) > after).slice(0, args.top || 10) };
+    const after = Date.parse(/receivedDateTime gt (\S+)/.exec(args.filter || "")?.[1] ?? "1970-01-01");
+    const before = Date.parse(/receivedDateTime lt (\S+)/.exec(args.filter || "")?.[1] ?? "2999-01-01");
+    const all = [...bulkOutlook, ...OUTLOOK()].filter((m) => Date.parse(m.receivedDateTime) > after && Date.parse(m.receivedDateTime) < before);
+    const offset = args.page_token?.startsWith("https:") ? Number(new URL(args.page_token).searchParams.get("$skip")) : Number(args.page_token?.replace("mock-outlook-", "")) || 0;
+    const value = all.slice(offset, offset + (args.top || 10));
+    const next = offset + value.length;
+    fetches.push({ tool, offset, count: value.length });
+    return { "@odata.context": "mock", value, ...(next < all.length ? outlookOpaque ? { next_page_token: `mock-outlook-${next}` } : { "@odata.nextLink": `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$skip=${next}` } : {}) };
   }
   if (tool === "SLACK_SEARCH_MESSAGES") {
     const matches = SLACK().slice(0, args.count || 10);
@@ -129,8 +145,19 @@ createServer(async (req, res) => {
       res.writeHead(200, { "content-type": "text/html" });
       return res.end(`<!doctype html><title>mock connector</title><p>${NAMES[toolkit]} is connected. You can close this tab and go back to Sift.</p>`);
     }
+    if (req.method === "GET" && path === "/mock/fetches") return send(res, 200, { fetches });
+    if (req.method === "GET" && path === "/mock/disconnect-fail") { disconnectFail = url.searchParams.get("toolkit") ?? ""; return send(res, 200, { ok: true }); }
+    if (req.method === "GET" && path === "/mock/bulk") {
+      const count = Math.min(500, Number(url.searchParams.get("count")) || 0);
+      const marker = url.searchParams.get("marker") || "";
+      const batch = hex(4);
+      if (url.searchParams.get("toolkit") === "gmail") bulkGmail = Array.from({ length: count }, (_, i) => gmail(`bulk-${batch}-${i}`, "Sender <sender@example.com>", `Bulk message ${i}`, 1 + i / 60, `Mock message ${i} ${i < 5 ? marker : ""}`));
+      if (url.searchParams.get("toolkit") === "outlook") bulkOutlook = Array.from({ length: count }, (_, i) => ({ ...OUTLOOK()[0], id: `bulk-${batch}-${i}`, receivedDateTime: ago(1 + i / 60).toISOString() }));
+      outlookOpaque = url.searchParams.get("opaque") === "1";
+      return send(res, 200, { ok: true });
+    }
     if (req.method === "GET" && path === "/mock/calls") return send(res, 200, { calls });
-    if (req.method === "GET" && path === "/mock/reset") { calls = []; arrived = []; failing = false; connected.clear(); return send(res, 200, { ok: true }); }
+    if (req.method === "GET" && path === "/mock/reset") { calls = []; arrived = []; bulkGmail = []; bulkOutlook = []; fetches = []; disconnectFail = ""; failing = false; connected.clear(); return send(res, 200, { ok: true }); }
     if (req.method === "GET" && path.startsWith("/mock/fail/")) { failing = path.endsWith("/on"); return send(res, 200, { failing }); }
     if (req.method === "GET" && path === "/mock/arrive") {
       arrived.unshift(gmail(`g-new-${hex(4)}`, "Mr. Kim <d.kim@lincolnhigh.example>", "Titration lab: partner forms due", 0,
@@ -152,6 +179,7 @@ createServer(async (req, res) => {
     if (path === "/api/connector/link" || path === "/api/connector/disconnect") {
       if (!TOOLKITS.includes(body.toolkit)) return error(res, 400, "invalid_request", `toolkit must be one of ${TOOLKITS.join(", ")}.`);
       if (path.endsWith("/link")) return send(res, 200, { url: `${ORIGIN}/mock-connect/${body.toolkit}?user=${user}` });
+      if (disconnectFail === body.toolkit) return error(res, 502, "disconnect_failed", "Mock disconnect failed");
       mine.delete(body.toolkit);
       return send(res, 200, { ok: true });
     }
