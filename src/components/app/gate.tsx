@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowSquareOut } from "@phosphor-icons/react";
 import type { GateInfo } from "@/lib/types";
@@ -15,6 +17,7 @@ export function Gate({ children }: { children: ReactNode }) {
   const [gate, setGate] = useState<GateInfo | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
+  const [starting, setStarting] = useState(false);
   const pollStart = useRef(0);
 
   const load = useCallback(async () => {
@@ -55,17 +58,37 @@ export function Gate({ children }: { children: ReactNode }) {
 
   if (gate?.state === "ready") return <>{children}</>;
 
-  const signIn = () => {
-    if (!gate?.claimUrl) return;
-    window.open(gate.claimUrl, "_blank", "noopener");
-    setNote("Waiting for you to sign in in the other tab.");
-    setPolling(true);
+  // The click is what creates this browser's session and publik install (POST), so page loads and bots never do.
+  // The tab opens inside the click so browsers don't block it, then goes to the claim link.
+  const signIn = async () => {
+    const tab = window.open("about:blank", "_blank");
+    setStarting(true);
+    try {
+      const g = await api<GateInfo>("/api/gate", { method: "POST" });
+      setGate(g);
+      if (g.state !== "sign_in" || !g.claimUrl) {
+        tab?.close();
+        return;
+      }
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = g.claimUrl;
+      } else window.location.href = g.claimUrl;
+      setNote("Waiting for you to sign in in the other tab.");
+      setPolling(true);
+    } catch (e) {
+      tab?.close();
+      setNote(e instanceof ApiFailure ? e.message : "publik is not reachable. Check your connection.");
+    } finally {
+      setStarting(false);
+    }
   };
 
   return (
     <main className="flex min-h-[100dvh] flex-col px-6 py-6 sm:px-10">
       <Wordmark />
-      <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center pb-16">
+      <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center pt-10 pb-16 lg:max-w-[880px] lg:flex-row lg:items-center lg:justify-between lg:gap-16 lg:pt-0">
+        <div className="w-full lg:max-w-[400px]">
         {!gate ? (
           <div className="space-y-4" aria-label="Loading">
             <Skeleton className="h-9 w-3/4" />
@@ -81,8 +104,8 @@ export function Gate({ children }: { children: ReactNode }) {
             </Button>
           </Panel>
         ) : (
-          <Panel title="Every inbox, sorted by what needs you." body="Gmail, Outlook and Slack in one list. Sift reads what's new, puts what needs you first, and learns what matters to you. Free to use: sign in with publik to start.">
-            <Button variant="primary" size="lg" className="w-full" onClick={signIn} disabled={!gate.claimUrl}>
+          <Panel title="Every inbox, sorted by what needs you." body="Gmail, Outlook and Slack in one list. Sift reads what's new, puts what needs you first, and learns what matters to you.">
+            <Button variant="primary" size="lg" className="w-full" onClick={() => void signIn()} loading={starting}>
               Sign in with publik
               <ArrowSquareOut size={16} />
             </Button>
@@ -92,8 +115,26 @@ export function Gate({ children }: { children: ReactNode }) {
                 {note}
               </p>
             ) : null}
+            <p className="mt-4 text-[13px] text-muted">Free to use, with a daily limit on AI sorting.</p>
           </Panel>
         )}
+        <p className="mt-6 flex gap-4 text-[13px] text-faint">
+          <Link href="/privacy" className="transition-colors hover:text-ink">Privacy</Link>
+          <Link href="/terms" className="transition-colors hover:text-ink">Terms</Link>
+        </p>
+        </div>
+        {gate?.state === "sign_in" ? (
+          <figure className="mx-auto mt-16 w-full max-w-[300px] shrink-0 lg:mx-0 lg:mt-0 lg:w-[300px]">
+            <Image
+              src="/gate-phone.jpg"
+              width={720}
+              height={1083}
+              sizes="300px"
+              alt="Sift on a phone: the Needs you pile, one line per message"
+              className="rounded-[14px] border border-line shadow-float [mask-image:linear-gradient(to_bottom,black_78%,transparent)] dark:opacity-90"
+            />
+          </figure>
+        ) : null}
       </div>
     </main>
   );
