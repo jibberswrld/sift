@@ -14,7 +14,10 @@ async function open(): Promise<Runner> {
   const schema = readFileSync(join(process.cwd(), "db", "schema.sql"), "utf8");
   if (process.env.DATABASE_URL) {
     const { Pool } = await import("pg");
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
+    // Idle Neon connections may disappear. Never let their error event crash the process
+    // or log a connection string / other provider error details.
+    pool.on("error", () => console.error("[db] An idle database connection closed; the pool will reconnect."));
     await pool.query(schema);
     return { query: (text, params) => pool.query(text, params as unknown[]) };
   }

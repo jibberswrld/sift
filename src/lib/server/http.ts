@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import type { SyncEvent } from "@/lib/types";
 
 export class HttpError extends Error {
   constructor(public status: number, public code: string, message: string, public topUpUrl: string | null = null) {
@@ -24,6 +25,13 @@ export function errorResponse(e: unknown): NextResponse {
 export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response>) {
   return async (...args: A): Promise<Response> => {
     try {
+      const req = args[0];
+      if (req instanceof Request && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+        const origin = req.headers.get("origin");
+        if (origin !== null && origin !== new URL(req.url).origin) {
+          throw new HttpError(403, "invalid_origin", "This request must come from Sift.");
+        }
+      }
       return await fn(...args);
     } catch (e) {
       return errorResponse(e);
@@ -39,26 +47,19 @@ export async function readJson(req: Request): Promise<unknown> {
   }
 }
 
-/** Stream an async generator as NDJSON, one event per line. Closing the tab stops the generator at its next step. */
-export function ndjson(events: AsyncGenerator<unknown>): Response {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      try {
-        const { value, done } = await events.next();
-        if (done) controller.close();
-        else controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
-      } catch (e) {
-        console.error("[stream]", e);
-        controller.enqueue(encoder.encode(JSON.stringify({ type: "error", code: "server_error", message: "Something went wrong. Please try again." }) + "\n"));
-        controller.close();
-      }
-    },
-    async cancel() {
-      await events.return(undefined);
-    },
-  });
-  return new Response(stream, {
+/** Buffer until AI completes so quota failures can still set HTTP status. Saved mail/results survive errors. */
+export async function ndjson(events: AsyncGenerator<SyncEvent>): Promise<Response> {
+  const lines: string[] = [];
+  let failure: HttpError | undefined;
+  for await (const event of events) {
+    if (event.type === "error" && ["ai_paused", "daily_limit", "busy"].includes(event.code)) {
+      const status = event.code === "ai_paused" ? 503 : event.code === "daily_limit" ? 429 : 409;
+      failure ??= new HttpError(status, event.code, event.message);
+    }
+    lines.push(JSON.stringify(event));
+  }
+  if (failure) return errorResponse(failure);
+  return new Response(lines.join("\n") + "\n", {
     headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store, no-transform", "x-accel-buffering": "no" },
   });
 }

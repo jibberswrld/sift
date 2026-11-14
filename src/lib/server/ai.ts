@@ -1,21 +1,23 @@
 import type { Row } from "./db";
 import { HttpError } from "./http";
-import { DEFAULT_BASE_URL, MODELS, topUpUrlFrom402 } from "./publik";
+import { DEFAULT_BASE_URL, MODELS } from "./publik";
 import { sessionKey } from "./session";
+import { aiPaused, reserveCall } from "./usage";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
 export interface Provider {
+  userId: string;
   baseURL: string;
   apiKey: string;
   model: string;
 }
 
 /** The developer's fellowship credits pay (PUBLIK_CREDITS_KEY). Without it (local tests), this session's own key does. */
-export function resolveProvider(session: Row): Provider {
+export function resolveProvider(session: Row, userId: string): Provider {
   const apiKey = process.env.PUBLIK_CREDITS_KEY || sessionKey(session);
   if (!apiKey) throw new HttpError(401, "gate", "Sign in with publik to continue.");
-  return { baseURL: DEFAULT_BASE_URL, apiKey, model: MODELS.balanced };
+  return { baseURL: DEFAULT_BASE_URL, apiKey, model: MODELS.balanced, userId };
 }
 
 export type ChatContent = string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
@@ -33,7 +35,7 @@ export class AiRequestError extends HttpError {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** One OpenAI-compatible chat completion. Returns the assistant text. Throws HttpError with a user-facing message. */
-export async function chat(p: Provider, messages: ChatMessage[], opts: { json?: boolean; maxTokens?: number; temperature?: number } = {}): Promise<string> {
+export async function chat(p: Provider, messages: ChatMessage[], opts: { json?: boolean; maxTokens?: number; temperature?: number; attempts?: 1 | 2 } = {}): Promise<string> {
   const body = JSON.stringify({
     model: p.model,
     messages,
@@ -44,7 +46,9 @@ export async function chat(p: Provider, messages: ChatMessage[], opts: { json?: 
   if (Buffer.byteLength(body) > MAX_BYTES) {
     throw new HttpError(413, "too_large", "That's too big to read in one go. Try a smaller file or paste the important part.");
   }
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const attempts = opts.attempts ?? 2;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    await reserveCall(p.userId, p);
     let res: Response;
     try {
       res = await fetch(`${p.baseURL.replace(/\/$/, "")}/chat/completions`, {
@@ -54,7 +58,7 @@ export async function chat(p: Provider, messages: ChatMessage[], opts: { json?: 
         signal: AbortSignal.timeout(60_000),
       });
     } catch {
-      if (attempt === 0) { await sleep(1500); continue; }
+      if (attempt + 1 < attempts) { await sleep(1500); continue; }
       throw new HttpError(503, "ai_unreachable", "publik is not reachable. Check your connection.");
     }
     const text = await res.text();
@@ -66,11 +70,8 @@ export async function chat(p: Provider, messages: ChatMessage[], opts: { json?: 
       if (Array.isArray(content)) return content.map((c: { text?: string }) => c.text ?? "").join("");
       throw new HttpError(502, "ai_error", "The AI returned an empty answer. Please try again.");
     }
-    if (res.status === 402) {
-      const t = topUpUrlFrom402(parsed);
-      throw new AiRequestError(402, "payment_required", t.message, text.slice(0, 500), t.url);
-    }
-    if ((res.status === 429 || res.status >= 500) && attempt === 0) { await sleep(1500); continue; }
+    if (res.status === 402 || (res.status === 429 && (parsed.error?.type === "daily_cap_reached" || parsed.error?.code === "daily_cap_reached"))) throw aiPaused();
+    if ((res.status === 429 || res.status >= 500) && attempt + 1 < attempts) { await sleep(1500); continue; }
     const detail = parsed.error?.message ?? text.slice(0, 300);
     if (res.status === 401 || res.status === 403) throw new AiRequestError(401, "gate", "Sign in with publik to continue.", detail);
     if (res.status === 429) throw new AiRequestError(429, "rate_limited", "Too many requests right now. Wait a few seconds and try again.", detail);
