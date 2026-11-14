@@ -4,7 +4,7 @@ import { connectorDisconnect, connectorError } from "@/lib/server/connector";
 import { sql } from "@/lib/server/db";
 import { handle, json } from "@/lib/server/http";
 import { clearCookie, requireReady } from "@/lib/server/session";
-import { acquireWork, releaseWork } from "@/lib/server/usage";
+import { accountUsageKey, acquireWork, releaseWork } from "@/lib/server/usage";
 
 export const GET = handle(async () => {
   const { user } = await requireReady();
@@ -20,7 +20,8 @@ export const DELETE = handle(async () => {
     // Attempt every toolkit, but keep the account/session available to retry any failure.
     const results = await Promise.all(TOOLKITS.map(async (toolkit) => ({ toolkit, result: await connectorDisconnect(user, toolkit) })));
     for (const { toolkit, result } of results) if (!result.ok) throw connectorError(result, toolkit);
-    await sql`delete from users where id = ${user.id}`; // cascades to messages, corrections, events, sessions, personal usage
+    await accountUsageKey(user.id); // preserve legacy allowances before cascading deletion
+    await sql`delete from users where id = ${user.id}`; // cascades to messages, corrections, events, sessions (anonymous allowances remain)
     await clearCookie();
     return json({ ok: true });
   } finally {

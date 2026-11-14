@@ -5,4 +5,7 @@ import { requireReady } from "@/lib/server/session";
 export const maxDuration = 300;
 
 /** Fetch new messages from every connected account and sort them. Streams SyncEvents as NDJSON. */
-export const POST = handle(async () => ndjson(syncInbox(await requireReady())));
+export const POST = handle(async () => {
+  const signal = AbortSignal.timeout(240_000);
+  return ndjson(syncInbox(await requireReady(), signal));
+});

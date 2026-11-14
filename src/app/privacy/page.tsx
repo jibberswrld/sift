@@ -31,6 +31,7 @@ const SECTIONS: [string, string[]][] = [
     [
       "Remove any correction from the What matters page.",
       "Settings → Delete everything permanently deletes your Sift account and everything Sift stored for it: messages, summaries, drafts, what you taught it, usage events and sign-in sessions. It also disconnects Gmail, Outlook and Slack from Sift.",
+      "Anonymous daily AI allowance counters remain after deletion so signing in again cannot reset the limit. They contain a secret-keyed account hash, date and counts, with no messages or handle.",
       "It does not touch anything in your Gmail, Outlook or Slack accounts themselves.",
     ],
   ],

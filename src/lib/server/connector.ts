@@ -1,7 +1,7 @@
 // Gmail, Outlook and Slack through Composio, on the server (COMPOSIO_API_KEY never reaches a browser).
 // Each Sift user is one Composio user. With CONNECTOR_ORIGIN set (tests), the same four calls go to
 // scripts/mock-connector.mjs instead. Nothing here throws for an account service that is down.
-import { Composio } from "@composio/core";
+import { Composio, type ToolRouterSession } from "@composio/core";
 import { TOOLKIT_NAMES, TOOLKITS, type Toolkit } from "@/lib/types";
 import type { Row } from "./db";
 import { HttpError } from "./http";
@@ -29,11 +29,14 @@ const fail = (kind: "unavailable" | "not_connected" | "error", code: string, mes
 const composioUser = (user: Row) => (user.publik_handle ? `sift_${user.publik_handle}` : `sift_user_${user.id}`);
 
 /** A Composio session for this user, scoped to the three toolkits. */
-async function session(user: Row) {
+async function session(user: Row, signal?: AbortSignal) {
   const apiKey = process.env.COMPOSIO_API_KEY;
   if (!apiKey) return null;
   const composio = new Composio({ apiKey });
-  return { composio, s: await composio.create(composioUser(user), { toolkits: TOOLKITS }) };
+  // The SDK's Session alias omits requestOptions; the concrete public class
+  // exposes them and forwards the signal for every session request.
+  const s = await composio.create(composioUser(user), { toolkits: TOOLKITS }, { signal }) as Pick<ToolRouterSession<never, never, never>, "toolkits" | "execute" | "authorize">;
+  return { composio, s };
 }
 
 function upstream(e: unknown, maybeDone = false) {
@@ -41,22 +44,24 @@ function upstream(e: unknown, maybeDone = false) {
   return fail("unavailable", "unavailable", UNAVAILABLE, maybeDone);
 }
 
-async function connected(s: NonNullable<Awaited<ReturnType<typeof session>>>["s"]): Promise<Record<Toolkit, boolean>> {
-  const { items } = await s.toolkits({ toolkits: TOOLKITS });
+async function connected(s: NonNullable<Awaited<ReturnType<typeof session>>>["s"], signal?: AbortSignal): Promise<Record<Toolkit, boolean>> {
+  const { items } = await s.toolkits({ toolkits: TOOLKITS }, { signal });
   const on = (t: Toolkit) => items.some((i) => i.slug.toLowerCase() === t && i.connection?.isActive === true);
   return { gmail: on("gmail"), outlook: on("outlook"), slack: on("slack") };
 }
 
 // ---------- tests: the mock connector over HTTP ----------
-async function mock<T>(user: Row, path: string, body: unknown | null): Promise<ConnectorResult<T>> {
+async function mock<T>(user: Row, path: string, body: unknown | null, signal?: AbortSignal): Promise<ConnectorResult<T>> {
   let res: Response;
   try {
     res = await fetch(`${process.env.CONNECTOR_ORIGIN!.replace(/\/$/, "")}/api/connector/${path}`, {
+      signal,
       method: body === null ? "GET" : "POST",
       headers: { authorization: `Bearer pk_${composioUser(user)}`, "content-type": "application/json" },
       body: body === null ? undefined : JSON.stringify(body),
     });
   } catch {
+    signal?.throwIfAborted();
     return fail("unavailable", "unavailable", UNAVAILABLE);
   }
   const parsed = (await res.json().catch(() => null)) as (T & { error?: { code?: string; message?: string } }) | null;
@@ -67,13 +72,14 @@ async function mock<T>(user: Row, path: string, body: unknown | null): Promise<C
 }
 
 // ---------- the four calls ----------
-export async function connectorStatus(user: Row): Promise<ConnectorResult<Record<Toolkit, boolean>>> {
-  if (process.env.CONNECTOR_ORIGIN) return mock(user, "status", null);
+export async function connectorStatus(user: Row, signal?: AbortSignal): Promise<ConnectorResult<Record<Toolkit, boolean>>> {
+  if (process.env.CONNECTOR_ORIGIN) return mock(user, "status", null, signal);
   try {
-    const c = await session(user);
+    const c = await session(user, signal);
     if (!c) return fail("unavailable", "not_configured", "Account connections aren't switched on yet.");
-    return { ok: true, data: await connected(c.s) };
+    return { ok: true, data: await connected(c.s, signal) };
   } catch (e) {
+    signal?.throwIfAborted();
     return upstream(e);
   }
 }
@@ -114,22 +120,23 @@ export async function connectorDisconnect(user: Row, toolkit: Toolkit): Promise<
 }
 
 /** Run one allowlisted tool, always against this user's own account. */
-export async function connectorRun(user: Row, tool: string, args: Record<string, unknown>): Promise<ConnectorResult<{ data: Record<string, unknown> }>> {
+export async function connectorRun(user: Row, tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ConnectorResult<{ data: Record<string, unknown> }>> {
   const toolkit = Object.hasOwn(ALLOWED_TOOLS, tool) ? ALLOWED_TOOLS[tool] : null;
   if (!toolkit) return fail("error", "tool_not_allowed", "Sift can't do that.");
-  if (process.env.CONNECTOR_ORIGIN) return mock(user, "run", { tool, arguments: args });
+  if (process.env.CONNECTOR_ORIGIN) return mock(user, "run", { tool, arguments: args }, signal);
   const writes = !/FETCH|LIST|SEARCH/.test(tool);
   try {
-    const c = await session(user);
+    const c = await session(user, signal);
     if (!c) return fail("unavailable", "not_configured", "Account connections aren't switched on yet.");
-    if (!(await connected(c.s))[toolkit]) return fail("not_connected", "not_connected", `Connect ${TOOLKIT_NAMES[toolkit]} first.`);
-    const result = await c.s.execute(tool, toolkit === "slack" ? args : { ...args, user_id: "me" });
+    if (!(await connected(c.s, signal))[toolkit]) return fail("not_connected", "not_connected", `Connect ${TOOLKIT_NAMES[toolkit]} first.`);
+    const result = await c.s.execute(tool, toolkit === "slack" ? args : { ...args, user_id: "me" }, undefined, { signal });
     if (result.resultType !== "completed") {
       console.error("[connector]", tool, result.resultType, result.error);
       return fail("error", "tool_failed", `${TOOLKIT_NAMES[toolkit]} couldn't complete that. Please try again.`);
     }
     return { ok: true, data: { data: slim(tool, result.data) } };
   } catch (e) {
+    signal?.throwIfAborted();
     return upstream(e, writes);
   }
 }

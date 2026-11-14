@@ -11,6 +11,7 @@ export interface Provider {
   baseURL: string;
   apiKey: string;
   model: string;
+  signal?: AbortSignal;
 }
 
 /** The developer's fellowship credits pay (PUBLIK_CREDITS_KEY). Without it (local tests), this session's own key does. */
@@ -48,16 +49,19 @@ export async function chat(p: Provider, messages: ChatMessage[], opts: { json?: 
   }
   const attempts = opts.attempts ?? 2;
   for (let attempt = 0; attempt < attempts; attempt++) {
+    p.signal?.throwIfAborted();
     await reserveCall(p.userId, p);
+    p.signal?.throwIfAborted();
     let res: Response;
     try {
       res = await fetch(`${p.baseURL.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${p.apiKey}` },
         body,
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(p.signal ? [p.signal] : [])]),
       });
     } catch {
+      p.signal?.throwIfAborted();
       if (attempt + 1 < attempts) { await sleep(1500); continue; }
       throw new HttpError(503, "ai_unreachable", "publik is not reachable. Check your connection.");
     }

@@ -18,7 +18,22 @@ async function open(): Promise<Runner> {
     // Idle Neon connections may disappear. Never let their error event crash the process
     // or log a connection string / other provider error details.
     pool.on("error", () => console.error("[db] An idle database connection closed; the pool will reconnect."));
-    await pool.query(schema);
+    const client = await pool.connect();
+    let initialized = false;
+    try {
+      await client.query("begin");
+      // Every instance must take this lock before any DDL can acquire table locks.
+      await client.query("select pg_advisory_xact_lock(1936287348)");
+      await client.query(schema);
+      await client.query("commit");
+      initialized = true;
+    } catch (e) {
+      await client.query("rollback");
+      throw e;
+    } finally {
+      client.release();
+      if (!initialized) await pool.end();
+    }
     return { query: (text, params) => pool.query(text, params as unknown[]) };
   }
   const { PGlite } = await import("@electric-sql/pglite");

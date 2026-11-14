@@ -8,6 +8,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
+assert(!process.env.DATABASE_URL, "Run with DATABASE_URL unset");
 assert(!existsSync(".env.local"), "Refusing to start Next where .env.local could be loaded");
 assert(![".env", ".env.production", ".env.production.local"].some(existsSync), "Refusing to load app env files");
 const dir = mkdtempSync(resolve(tmpdir(), "sift-backend-e2e-"));
@@ -114,6 +115,11 @@ try {
 
   await fetch(`${publik}/mock/control?delay=250`);
   const id = inbox.find((m) => m.source === "gmail").id;
+  const runningResort = main("/api/inbox/resort", "POST");
+  await pause(100);
+  assert.equal((await main(`/api/messages/${id}/draft`, "POST")).status, 200);
+  assert.equal((await runningResort).status, 200);
+  console.log("PASS built app drafts during a re-sort lease");
   const before = (await json(`${publik}/mock/stats`)).body.chats.length;
   const burst = await Promise.all(Array.from({ length: 50 }, () => main(`/api/messages/${id}/draft`, "POST")));
   const accepted = burst.filter((r) => r.status === 200).length;
@@ -134,6 +140,14 @@ try {
   assert.deepEqual(limitResponse.body, limited);
   assert.equal((await json(`${publik}/mock/stats`)).body.chats.length, 200);
   console.log("PASS per-user allowance: exactly 200 total model attempts, then HTTP 429 daily_limit with exact JSON");
+
+  // Deleting and signing in again must not buy more AI calls.
+  assert.equal((await main("/api/me", "DELETE")).status, 200);
+  const mainAgain = await signIn("first-sync");
+  await connect(mainAgain, "gmail");
+  assert.equal((await mainAgain("/api/inbox/sync", "POST")).status, 429);
+  assert((await mainAgain("/api/inbox")).body.messages.every((m) => m.bucket === null));
+  console.log("PASS built app account recreation preserves exhausted 200-call allowance and still stores mail");
 
   for (const code of [402, 429]) {
     const call = await signIn(`paused-${code}`);
@@ -182,7 +196,11 @@ try {
     if (toolkit === "gmail") {
       const reSort = await call("/api/inbox/resort", "POST");
       assert(reSort.body.some((e) => e.type === "done" && e.sorted === 100));
-      console.log("PASS sort-again run is capped at 100 messages");
+      const onceIds = new Set(reSort.body.filter((e) => e.type === "sorted").flatMap((e) => e.messages.map((m) => m.id)));
+      const twice = await call("/api/inbox/resort", "POST");
+      const twiceIds = twice.body.filter((e) => e.type === "sorted").flatMap((e) => e.messages.map((m) => m.id));
+      assert.equal(new Set([...onceIds, ...twiceIds]).size, count);
+      console.log("PASS sort-again cap is 100; two runs reach every eligible message");
     }
   }
   await fetch(`${connector}/mock/bulk?toolkit=outlook&count=30&opaque=1`);
@@ -191,6 +209,20 @@ try {
   assert.equal((await opaque("/api/inbox/sync", "POST")).status, 200);
   assert.equal((await opaque("/api/inbox")).body.messages.length, 33);
   console.log("PASS Outlook next_page_token path as well as @odata.nextLink path");
+
+  await fetch(`${connector}/mock/bulk?toolkit=gmail&count=30&marker=PAUSE_BATCH`);
+  await fetch(`${publik}/mock/control?pauseBatch=1`);
+  const quotaPartial = await signIn("partial-quota");
+  await connect(quotaPartial, "gmail");
+  assert.deepEqual(await quotaPartial("/api/inbox/sync", "POST"), { status: 503, body: paused });
+  const quotaRows = (await quotaPartial("/api/inbox")).body.messages;
+  assert(quotaRows.some((m) => m.bucket) && quotaRows.some((m) => !m.bucket));
+  assert.equal((await quotaPartial("/api/inbox/resort", "POST")).status, 503);
+  await fetch(`${publik}/mock/control?pauseBatch=0`);
+  const quotaContinue = await quotaPartial("/api/inbox/sync", "POST");
+  assert(quotaContinue.body.some((e) => e.type === "done" && e.added === 0 && e.sorted > 0));
+  assert((await quotaPartial("/api/inbox")).body.messages.every((m) => m.bucket));
+  console.log("PASS paused sync/re-sort expose saved sibling results through GET; next sync sorts stored unsorted mail without new arrivals");
 
   await fetch(`${connector}/mock/bulk?toolkit=gmail&count=30&marker=FAIL_BATCH`);
   await fetch(`${publik}/mock/control?failBatch=1`);
@@ -232,7 +264,10 @@ try {
   const reSortDenied = await reSortLimit("/api/inbox/resort", "POST");
   assert.equal(reSortDenied.status, 429);
   assert.deepEqual(reSortDenied.body, limited);
-  console.log("PASS built app allows 20 re-sort runs, then returns exact HTTP 429 daily_limit");
+  assert.equal((await reSortLimit("/api/me", "DELETE")).status, 200);
+  const reSortAgain = await signIn("resort-limit");
+  assert.deepEqual(await reSortAgain("/api/inbox/resort", "POST"), { status: 429, body: limited });
+  console.log("PASS built app allows 20 re-sort runs, then HTTP 429 persists across account recreation");
 
   const fallback = await signIn("global-fallback");
   await connect(fallback, "gmail");
@@ -259,7 +294,7 @@ try {
     await fetch(`${publik}/mock/control?walletUnavailable=0`);
     await fetch(`${connector}/mock/reset`);
     await restart();
-    console.log(`BROWSER_APP=${app} MOCK_PUBLIK=${publik}`);
+    console.log(`BROWSER_APP=${app} MOCK_PUBLIK=${publik} MOCK_CONNECTOR=${connector}`);
     console.log("Waiting for browser verification; SIGINT cleans up all local children/data.");
     await once(process, "SIGINT");
   }

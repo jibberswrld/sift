@@ -19,6 +19,7 @@ let dailyCap = 200_000_000;
 let walletUnavailable = false;
 let chats = [];
 let failBatch = false;
+let pauseBatch = false;
 let malformed = false;
 let chatDelay = 0;
 let force402 = false; // GET /mock/402/on|off toggles an empty-balance answer for chat
@@ -71,6 +72,7 @@ createServer(async (req, res) => {
       if (url.searchParams.has("spent")) spent = Number(url.searchParams.get("spent"));
       if (url.searchParams.has("cap")) dailyCap = Number(url.searchParams.get("cap"));
       if (url.searchParams.has("walletUnavailable")) walletUnavailable = url.searchParams.get("walletUnavailable") === "1";
+      if (url.searchParams.has("pauseBatch")) pauseBatch = url.searchParams.get("pauseBatch") === "1";
       if (url.searchParams.has("failBatch")) failBatch = url.searchParams.get("failBatch") === "1";
       if (url.searchParams.has("malformed")) malformed = url.searchParams.get("malformed") === "1";
       if (url.searchParams.has("delay")) chatDelay = Number(url.searchParams.get("delay"));
@@ -112,6 +114,7 @@ createServer(async (req, res) => {
       if (force429) return send(res, 429, { error: { type: "daily_cap_reached", message: "Developer daily cap reached" } });
       if (force402) return send(res, 402, { error: { message: "Your publik balance is empty.", top_up_url: `${ORIGIN}/wallet` } });
       if (process.env.MOCK_AI_FIXTURE === "1") {
+        if (pauseBatch && messages.some((m) => m.body.includes("PAUSE_BATCH"))) return send(res, 402, { error: { message: "Mock wallet paused mid-sort" } });
         if (failBatch && messages.some((m) => m.body.includes("FAIL_BATCH"))) return send(res, 500, { error: { message: "Mock batch failure" } });
         const results = messages.map((m) => ({ id: m.id, bucket: "important", summary: "A mock message needs your attention", reason: "Fixture classification", needs_reply: true, injection: m.body.includes("Ignore previous instructions") }));
         const content = malformed ? "not JSON" : messages.length ? JSON.stringify({ results }) : "Thanks for checking. [blank] works for me.";

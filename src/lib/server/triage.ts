@@ -76,6 +76,7 @@ ${JSON.stringify(data)}`;
 
   let parsed: unknown = null;
   for (let attempt = 0; attempt < 2 && parsed === null; attempt++) {
+    p.signal?.throwIfAborted();
     try {
       // This layer owns the two-attempt budget, including HTTP failures and malformed JSON.
       const text = await chat(p, [{ role: "system", content: SYSTEM }, { role: "user", content: user }], { json: true, maxTokens: 2_000, temperature: 0, attempts: 1 });
@@ -99,6 +100,7 @@ ${JSON.stringify(data)}`;
       if (!out.get(m.id)?.injection) continue;
       // Never save a flagged message's batch classification if isolation fails.
       out.delete(m.id);
+      if (p.signal?.aborted) continue;
       const own = (await sortBatch(p, ctx, [m], false)).get(m.id);
       if (own) out.set(m.id, { ...own, injection: true });
     }
