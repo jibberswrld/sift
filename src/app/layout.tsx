@@ -14,10 +14,10 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Sift: every inbox, sorted by what needs you",
     description: "Gmail, Outlook and Slack in one list. Sift tells you why each message matters and learns what you care about. Free.",
-    images: [{ url: "/readme/hero.jpg", width: 3200, height: 1800, alt: "Sift" }],
+    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Sift: every inbox, sorted by what needs you" }],
     type: "website",
   },
-  twitter: { card: "summary_large_image", images: ["/readme/hero.jpg"] },
+  twitter: { card: "summary_large_image", images: ["/og.jpg"] },
 };
 
 export const viewport: Viewport = {

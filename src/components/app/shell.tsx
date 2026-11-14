@@ -3,17 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
-import { GearSix, Lightbulb } from "@phosphor-icons/react";
+import { ArrowClockwise, GearSix, Lightbulb } from "@phosphor-icons/react";
 import { Wordmark } from "../brand";
 import { cx } from "../ui";
-import { api } from "./api";
+import { AI_PAUSED_MESSAGE, api } from "./api";
 import { ago } from "./bits";
 import { useInbox } from "./inbox";
 
 /** One quiet top bar. The inbox page puts its pile tabs in it; everything else is two icons. */
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const { sync, lastSyncAt, runSync } = useInbox();
+  const { sync, lastSyncAt, runSync, aiPaused } = useInbox();
   usePublikPresence();
 
   const icon = (href: string, label: string, Icon: typeof GearSix) => (
@@ -46,10 +46,24 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className={cx("size-1.5 rounded-full", sync.running ? "animate-pulse bg-accent-text" : "bg-ok/70")} aria-hidden />
             {sync.running ? `${sync.step ?? "Checking"}…` : lastSyncAt ? `Checked ${ago(lastSyncAt) === "now" ? "just now" : `${ago(lastSyncAt)} ago`}` : "Check now"}
           </button>
+          {/* Phones: the same check as a 44px icon, since the text button above is desktop-only. */}
+          <button
+            onClick={() => void runSync()}
+            disabled={!!sync.running}
+            aria-label={sync.running ? `${sync.step ?? "Checking"}…` : "Check for new messages"}
+            className="-mr-1 inline-flex size-11 items-center justify-center rounded-lg text-muted transition-colors duration-150 active:bg-ink/[0.05] disabled:text-faint sm:hidden"
+          >
+            <ArrowClockwise size={18} className={sync.running ? "motion-safe:animate-spin" : undefined} />
+          </button>
           {icon("/teach", "What matters to you", Lightbulb)}
           {icon("/settings", "Settings", GearSix)}
         </div>
       </header>
+      {aiPaused ? (
+        <div role="status" className="border-b border-line bg-surface-2/60">
+          <p className="mx-auto max-w-[1400px] px-4 py-2.5 text-[13.5px] leading-snug text-ink-2 sm:px-6">{AI_PAUSED_MESSAGE}</p>
+        </div>
+      ) : null}
       {children}
     </div>
   );

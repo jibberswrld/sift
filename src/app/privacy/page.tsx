@@ -9,6 +9,7 @@ const SECTIONS: [string, string[]][] = [
     "What Sift stores",
     [
       "New messages from the accounts you connect (sender, subject, text and a link back to the original), with the summary and pile Sift gave each one.",
+      "Message text, senders and subjects are stored unencrypted in Sift's database until you delete them. Access to the database is limited to Sift's server.",
       "What you wrote on the What matters page, the corrections you made, and reply drafts.",
       "It is kept in Sift's database, linked to your publik account and visible only to you.",
       "Your publik handle and time zone, and an encrypted publik key for each browser you sign in on.",
@@ -18,16 +19,19 @@ const SECTIONS: [string, string[]][] = [
   [
     "How your messages are processed",
     [
-      "To sort messages and write drafts, their text is sent to publik API, which Sift pays for. publik does not train on requests.",
+      "To sort messages and write drafts, their sender, subject and text are sent through publik API to the AI provider that runs the model. Sift pays for it. publik does not train on requests.",
       "Message content is treated as data. Instructions inside a message can't make Sift do anything.",
-      "Gmail, Outlook and Slack connect through Composio. Sift reads new messages each time it checks, and sends a reply only after you press Send and confirm. It never deletes, archives or changes anything in your accounts. You can disconnect in Settings.",
+      "Gmail, Outlook and Slack connect through Composio. Your sign-in tokens for those accounts are held by Composio, not by Sift.",
+      "Sift reads new messages each time it checks, and sends a reply only after you press Send and confirm. It never deletes, archives or changes anything in your accounts. You can disconnect in Settings.",
+      "Connecting Slack lets Sift search the whole workspace you can see, including your direct messages and private channels. Sift stores the recent messages that search returns.",
     ],
   ],
   [
     "Deleting your data",
     [
       "Remove any correction from the What matters page.",
-      "Settings → Delete everything permanently removes your account and all of its data.",
+      "Settings → Delete everything permanently deletes your Sift account and everything Sift stored for it: messages, summaries, drafts, what you taught it, usage events and sign-in sessions. It also disconnects Gmail, Outlook and Slack from Sift.",
+      "It does not touch anything in your Gmail, Outlook or Slack accounts themselves.",
     ],
   ],
   [
@@ -57,11 +61,8 @@ export default function Privacy() {
         ))}
       </div>
       <p className="mt-12 text-[14px] text-muted">
-        Sift is open source.{" "}
-        <a className="text-accent-text underline underline-offset-2" href="https://github.com/jibberswrld/sift">
-          Read the code
-        </a>{" "}
-        or <Link className="text-accent-text underline underline-offset-2" href="/">go back home</Link>.
+        Read the <Link className="text-accent-text underline underline-offset-2" href="/terms">terms</Link> or{" "}
+        <Link className="text-accent-text underline underline-offset-2" href="/">go back home</Link>.
       </p>
     </div>
   );

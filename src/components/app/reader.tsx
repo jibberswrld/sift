@@ -6,7 +6,7 @@ import { ArrowSquareOut, Check, Copy, Sparkle, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TOOLKIT_NAMES, type Bucket, type Message, type MessageDetail } from "@/lib/types";
 import { Button, cx, IconButton, Skeleton } from "../ui";
-import { api, ApiFailure } from "./api";
+import { AI_PAUSED_MESSAGE, api, ApiFailure, isAiPaused } from "./api";
 import { BUCKET_LABEL, senderName, SourceLogo } from "./bits";
 import { useInbox } from "./inbox";
 
@@ -142,7 +142,7 @@ function Sorting({ m }: { m: Message }) {
 }
 
 function Reply({ m }: { m: Message }) {
-  const { update } = useInbox();
+  const { update, notePaused } = useInbox();
   const [text, setText] = useState(m.draft ?? "");
   const [busy, setBusy] = useState<"draft" | "send" | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -165,7 +165,10 @@ function Reply({ m }: { m: Message }) {
       setText(r.draft ?? "");
       update(r);
     } catch (e) {
-      toast.error(e instanceof ApiFailure ? e.message : "Couldn't write a draft.");
+      if (e instanceof ApiFailure && isAiPaused(e)) {
+        notePaused();
+        toast(AI_PAUSED_MESSAGE);
+      } else toast.error(e instanceof ApiFailure ? e.message : "Couldn't write a draft.");
     } finally {
       setBusy(null);
     }
