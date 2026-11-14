@@ -144,7 +144,7 @@ function Sorting({ m }: { m: Message }) {
 function Reply({ m }: { m: Message }) {
   const { update, notePaused } = useInbox();
   const [text, setText] = useState(m.draft ?? "");
-  const [busy, setBusy] = useState<"draft" | "send" | null>(null);
+  const [busy, setBusy] = useState<"draft" | "waiting" | "send" | null>(null);
   const [confirm, setConfirm] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
   const canSend = m.source !== "slack";
@@ -161,7 +161,16 @@ function Reply({ m }: { m: Message }) {
   const draft = async () => {
     setBusy("draft");
     try {
-      const r = await api<Message>(`/api/messages/${m.id}/draft`, { method: "POST" });
+      let r: Message;
+      try {
+        r = await api<Message>(`/api/messages/${m.id}/draft`, { method: "POST" });
+      } catch (e) {
+        if (!(e instanceof ApiFailure) || e.code !== "busy") throw e;
+        setBusy("waiting");
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        setBusy("draft");
+        r = await api<Message>(`/api/messages/${m.id}/draft`, { method: "POST" });
+      }
       setText(r.draft ?? "");
       update(r);
     } catch (e) {
@@ -198,8 +207,8 @@ function Reply({ m }: { m: Message }) {
             setText(e.target.value);
             setConfirm(false);
           }}
-          disabled={busy === "draft"}
-          placeholder={busy === "draft" ? "Writing a draft…" : `Reply to ${senderName(m.from)}…`}
+          disabled={busy === "draft" || busy === "waiting"}
+          placeholder={busy === "waiting" ? "Waiting a moment…" : busy === "draft" ? "Writing a draft…" : `Reply to ${senderName(m.from)}…`}
           className="block w-full resize-none bg-transparent px-4 pt-3 text-[14.5px] leading-relaxed text-ink outline-none placeholder:text-faint"
         />
         <div className="flex items-center gap-1 px-2 pb-2">
@@ -209,7 +218,7 @@ function Reply({ m }: { m: Message }) {
             className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12.5px] font-medium text-accent-text transition-colors hover:bg-accent-soft disabled:opacity-50"
           >
             <Sparkle size={13} weight="fill" />
-            {busy === "draft" ? "Writing…" : text ? "Rewrite" : "Draft with AI"}
+            {busy === "waiting" ? "Waiting…" : busy === "draft" ? "Writing…" : text ? "Rewrite" : "Draft with AI"}
           </button>
           {text ? (
             <button
@@ -229,7 +238,7 @@ function Reply({ m }: { m: Message }) {
               size="sm"
               variant={confirm ? "primary" : "secondary"}
               loading={busy === "send"}
-              disabled={!text.trim() || busy === "draft"}
+              disabled={!text.trim() || busy === "draft" || busy === "waiting"}
               onClick={() => (confirm ? void send() : setConfirm(true))}
               className={cx("h-7 px-2.5 text-[12.5px]", confirm && "bg-accent-text text-white hover:bg-accent-text/90")}
             >

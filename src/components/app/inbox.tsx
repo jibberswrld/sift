@@ -138,11 +138,12 @@ export function InboxProvider({ children }: { children: ReactNode }) {
           }
         });
         if (kind === "sync") lastSyncRef.current = Date.now();
-        await Promise.all([refresh(), refreshConnections()]); // fetched messages the sorter didn't reach; accounts may have changed
       } catch (e) {
         if (e instanceof ApiFailure && isAiPaused(e)) paused = true;
         else error = e instanceof ApiFailure ? e.message : "Couldn't reach your inbox. Try again.";
       } finally {
+        // Failed/paused responses may still have saved new mail and partial sorting.
+        await Promise.all([refresh(), refreshConnections()]);
         busy.current = false;
         // Stay paused until a sort actually goes through again.
         if (paused) setAiPaused(true);
