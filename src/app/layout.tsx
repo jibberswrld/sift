@@ -10,6 +10,14 @@ export const metadata: Metadata = {
   title: { default: "Sift: one inbox, sorted", template: "%s · Sift" },
   description: "Gmail, Outlook and Slack in one inbox. Sift sorts what needs you from what can wait, and learns what matters to you.",
   applicationName: "Sift",
+  metadataBase: new URL("https://sift-nu-ebon.vercel.app"),
+  openGraph: {
+    title: "Sift: every inbox, sorted by what needs you",
+    description: "Gmail, Outlook and Slack in one list. Sift tells you why each message matters and learns what you care about. Free.",
+    images: [{ url: "/readme/hero.jpg", width: 3200, height: 1800, alt: "Sift" }],
+    type: "website",
+  },
+  twitter: { card: "summary_large_image", images: ["/readme/hero.jpg"] },
 };
 
 export const viewport: Viewport = {
