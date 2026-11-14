@@ -14,6 +14,14 @@ export class ApiFailure extends Error {
   }
 }
 
+/** The developer's wallet pays for everyone's AI, so when it runs dry people see this and never a top-up link. */
+export const AI_PAUSED_MESSAGE = "Sift's free AI is paused for today. Your messages are still here; sorting resumes tomorrow.";
+
+/** ai_paused (503), or what an older backend sends for an empty wallet: any 402 or a top-up link. */
+export function isAiPaused(e: { status?: number; code?: string | null; topUpUrl?: string | null }): boolean {
+  return e.code === "ai_paused" || e.code === "payment_required" || e.status === 402 || !!e.topUpUrl;
+}
+
 function timezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -47,7 +55,7 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
       res.status,
       e?.code ?? "error",
       e?.message ?? `Something went wrong (${res.status}). Try again.`,
-      e?.topUpUrl ?? null,
+      e?.topUpUrl ?? (e as { top_up_url?: string } | undefined)?.top_up_url ?? null,
     );
   }
   return body as T;

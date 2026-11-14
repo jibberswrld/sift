@@ -39,6 +39,17 @@ create table if not exists ai_daily_usage (
   primary key (user_id, day)
 );
 
+-- Retain anonymous quota counters across account deletion. The server transfers
+-- legacy counters once, before reserving more usage or deleting the user.
+alter table ai_daily_usage add column if not exists account_key text;
+create table if not exists ai_account_daily_usage (
+  account_key text not null,
+  day date not null,
+  calls integer not null default 0,
+  resorts integer not null default 0,
+  primary key (account_key, day)
+);
+
 create table if not exists ai_daily_global (
   day date primary key,
   calls integer not null default 0
@@ -68,6 +79,9 @@ create table if not exists messages (
   sent_ok boolean not null default false,
   created_at timestamptz not null default now()
 );
+alter table messages add column if not exists last_sorted_at timestamptz;
+alter table messages add column if not exists draft_lock_token text;
+alter table messages add column if not exists draft_lock_until timestamptz;
 create unique index if not exists messages_user_external_idx on messages(user_id, source, external_id);
 create index if not exists messages_user_received_idx on messages(user_id, received_at desc);
 

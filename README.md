@@ -46,7 +46,9 @@ Sift follows your system theme and works on any screen. `j` / `k` move through t
 - **It never changes your accounts.** Sift reads new messages and sends a reply only when you confirm it. It never deletes, archives or marks anything. "Done" only hides a message in Sift.
 - **Messages are data, not commands.** If an email tries to give the AI instructions ("ignore previous instructions and…"), Sift flags it, ignores it, and sorts it by what it really is.
 - **Your data is yours.** Your messages are stored for your account only. Delete everything from Settings at any time.
-- **Free to use.** The AI runs on publik and Sift pays for it. There's no plan to pick and no key to paste.
+- **Free to use.** The AI runs on publik and Sift pays for it. There's no plan to pick and no key to paste. Free AI has a daily limit; if it runs out, sorting pauses until the next day and your messages stay put.
+
+[Privacy](https://sift-nu-ebon.vercel.app/privacy) · [Terms](https://sift-nu-ebon.vercel.app/terms)
 
 ## For developers
 
@@ -63,13 +65,9 @@ Node.js 22+ and pnpm. With no `DATABASE_URL`, data goes to an embedded PGlite in
 
 ```sh
 pnpm install && pnpm build
-node scripts/mock-connector.mjs   # fake Gmail, Outlook and Slack on :4666
+node scripts/mock-connector.mjs   # stands in for Composio: fake Gmail, Outlook and Slack on :4666
 node scripts/mock-publik.mjs      # fake publik on :4555 (set MOCK_UPSTREAM_* to reach a real model)
 PUBLIK_ORIGIN=http://localhost:4555 PUBLIK_APP_TOKEN=pat_mocktoken CONNECTOR_ORIGIN=http://localhost:4666 SIFT_DATA_DIR=/tmp/sift pnpm start
 ```
 
-See `.env.example` for the production environment.
-
-## License
-
-MIT
+`CONNECTOR_ORIGIN` exists only for that mock. In production Sift calls Composio directly from its own server; there is no separate connector deployment. See `.env.example` for the production environment.

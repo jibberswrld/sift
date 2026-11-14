@@ -51,7 +51,7 @@ export interface Inbox {
 export type SyncEvent =
   | { type: "step"; text: string }
   | { type: "sorted"; messages: Message[] }
-  | { type: "done"; added: number; sorted: number }
+  | { type: "done"; added: number; sorted: number; partial?: boolean }
   | { type: "error"; code: string; message: string; topUpUrl?: string | null };
 
 // GET  /api/messages/:id              -> MessageDetail

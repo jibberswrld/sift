@@ -4,14 +4,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from "sonner";
 import type { Bucket, Connections, Inbox, Message, SyncEvent, Toolkit } from "@/lib/types";
 import { TOOLKIT_NAMES } from "@/lib/types";
-import { api, ApiFailure } from "./api";
+import { api, ApiFailure, isAiPaused } from "./api";
 
 const RESYNC_AFTER_MS = 5 * 60_000;
 
 interface Sync {
   running: "sync" | "resort" | null;
   step: string | null; // what Sift is doing right now
-  error: { message: string; topUpUrl: string | null } | null;
+  error: string | null; // anything except a paused AI, which is aiPaused
 }
 
 interface InboxState {
@@ -21,6 +21,8 @@ interface InboxState {
   connections: Connections | null;
   linking: Toolkit | null;
   sync: Sync;
+  aiPaused: boolean; // the developer's wallet or Sift's global limit ran out for today
+  notePaused: () => void;
   selectedId: string | null;
   select: (id: string | null) => void;
   refresh: () => Promise<void>;
@@ -51,8 +53,8 @@ const tz = () => {
 async function readStream(path: string, onEvent: (e: SyncEvent) => void) {
   const res = await fetch(path, { method: "POST", headers: { "x-timezone": tz() } });
   if (!res.ok || !res.body) {
-    const b = (await res.json().catch(() => null)) as { error?: { message?: string; code?: string; topUpUrl?: string } } | null;
-    throw new ApiFailure(res.status, b?.error?.code ?? "error", b?.error?.message ?? "Couldn't reach your inbox.", b?.error?.topUpUrl ?? null);
+    const b = (await res.json().catch(() => null)) as { error?: { message?: string; code?: string; topUpUrl?: string; top_up_url?: string } } | null;
+    throw new ApiFailure(res.status, b?.error?.code ?? "error", b?.error?.message ?? "Couldn't reach your inbox.", b?.error?.topUpUrl ?? b?.error?.top_up_url ?? null);
   }
   const reader = res.body.getReader();
   const dec = new TextDecoder();
@@ -79,6 +81,8 @@ export function InboxProvider({ children }: { children: ReactNode }) {
   const [linking, setLinking] = useState<Toolkit | null>(null);
   const [sync, setSync] = useState<Sync>({ running: null, step: null, error: null });
   const [selectedId, select] = useState<string | null>(null);
+  const [aiPaused, setAiPaused] = useState(false);
+  const notePaused = useCallback(() => setAiPaused(true), []);
   const busy = useRef(false);
   const lastSyncRef = useRef<number>(0);
 
@@ -120,18 +124,30 @@ export function InboxProvider({ children }: { children: ReactNode }) {
       busy.current = true;
       setSync({ running: kind, step: kind === "sync" ? "Checking your accounts" : "Sorting again", error: null });
       let error: Sync["error"] = null;
+      let paused = false;
+      let sortedSome = false;
       try {
         await readStream(`/api/inbox/${kind}`, (e) => {
           if (e.type === "step") setSync((s) => ({ ...s, step: e.text }));
-          else if (e.type === "sorted") merge(e.messages);
-          else if (e.type === "error") error = { message: e.message, topUpUrl: e.topUpUrl ?? null };
+          else if (e.type === "sorted") {
+            merge(e.messages);
+            if (e.messages.some((m) => m.bucket)) sortedSome = true;
+          } else if (e.type === "error") {
+            if (isAiPaused({ code: e.code, topUpUrl: e.topUpUrl ?? (e as { top_up_url?: string }).top_up_url })) paused = true;
+            else error = e.message;
+          }
         });
         if (kind === "sync") lastSyncRef.current = Date.now();
-        await Promise.all([refresh(), refreshConnections()]); // fetched messages the sorter didn't reach; accounts may have changed
       } catch (e) {
-        error = { message: e instanceof ApiFailure ? e.message : "Couldn't reach your inbox. Try again.", topUpUrl: e instanceof ApiFailure ? e.topUpUrl : null };
+        if (e instanceof ApiFailure && isAiPaused(e)) paused = true;
+        else error = e instanceof ApiFailure ? e.message : "Couldn't reach your inbox. Try again.";
       } finally {
+        // Failed/paused responses may still have saved new mail and partial sorting.
+        await Promise.all([refresh(), refreshConnections()]);
         busy.current = false;
+        // Stay paused until a sort actually goes through again.
+        if (paused) setAiPaused(true);
+        else if (sortedSome) setAiPaused(false);
         setSync({ running: null, step: null, error });
       }
     },
@@ -230,8 +246,8 @@ export function InboxProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<InboxState>(
-    () => ({ messages, loadError, lastSyncAt, connections, linking, sync, selectedId, select, refresh, runSync, runResort, move, setDone, update, connect, disconnect }),
-    [messages, loadError, lastSyncAt, connections, linking, sync, selectedId, refresh, runSync, runResort, move, setDone, update, connect, disconnect],
+    () => ({ messages, loadError, lastSyncAt, connections, linking, sync, aiPaused, notePaused, selectedId, select, refresh, runSync, runResort, move, setDone, update, connect, disconnect }),
+    [messages, loadError, lastSyncAt, connections, linking, sync, aiPaused, notePaused, selectedId, refresh, runSync, runResort, move, setDone, update, connect, disconnect],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

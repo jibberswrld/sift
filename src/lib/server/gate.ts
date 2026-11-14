@@ -41,17 +41,27 @@ async function linkUser(s: Row, w: Wallet): Promise<Row> {
   return user;
 }
 
-/** The gate, one step per call. The client polls GET /api/gate every 3 s while the sign-in screen is up. */
-export async function computeGate(s: Row): Promise<GateInfo> {
+/** Before a session has a publik install: the sign-in screen, with no claim link yet. */
+export function signInGate(): GateInfo {
   if (!isConfigured()) {
     return info("not_configured", null, { body: "Sift is not connected to publik yet. Please try again later." });
   }
+  return info("sign_in", null, gateWords("sign_in"));
+}
+
+/**
+ * The gate, one step per call. The client polls GET /api/gate every 3 s while the sign-in screen is up.
+ * Only `provision` (POST, the Sign in click) creates a publik install, so page loads and bots never do.
+ */
+export async function computeGate(s: Row, provision = false): Promise<GateInfo> {
+  if (!isConfigured()) return signInGate();
   let w: Wallet | null = null;
   try {
     for (let attempt = 0; ; attempt++) {
+      if (!provision && !sessionKey(s)) return signInGate();
       const r = await readWallet(await ensureKey(s));
       if (r.status === 401 && attempt === 0) {
-        // A revoked key: this session provisions again.
+        // A revoked key: this session provisions again (on the next Sign in click when this is a GET).
         await resetSession(s);
         s.publik_key_enc = null;
         continue;

@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { sql } from "./db";
 import { HttpError } from "./http";
+import { localSecret } from "./local";
 
 export const DAILY_CALLS = 200;
 export const DAILY_RESORTS = 20;
@@ -10,7 +11,7 @@ export const GLOBAL_DAILY_CALLS = 2_000;
 export const aiPaused = () => new HttpError(503, "ai_paused", "Sift's free AI is paused for today. Your messages are still here; sorting resumes tomorrow.");
 export const dailyLimit = () => new HttpError(429, "daily_limit", "You've reached today's limit for AI sorting and drafts. It resets tomorrow.");
 
-/** One expiring lease across instances, shared by sync, re-sort, drafts and deletion. */
+/** One expiring lease across instances, shared by sync, re-sort and deletion. */
 export async function acquireWork(userId: string): Promise<string> {
   const token = randomUUID();
   const rows = await sql`
@@ -22,6 +23,25 @@ export async function acquireWork(userId: string): Promise<string> {
 
 export async function releaseWork(userId: string, token: string): Promise<void> {
   await sql`update users set ai_lock_token = null, ai_lock_until = null where id = ${userId} and ai_lock_token = ${token}`;
+}
+
+/** No handle or deletable foreign key is retained in the allowance ledger. */
+export async function accountUsageKey(userId: string): Promise<string> {
+  const [user] = await sql`select publik_handle from users where id = ${userId}`;
+  if (!user?.publik_handle) throw new HttpError(401, "gate", "Sign in with publik to continue.");
+  const key = createHmac("sha256", localSecret()).update(`sift-usage:${user.publik_handle}`).digest("hex");
+  // Mark and copy in one statement: concurrent requests can transfer each row only once.
+  await sql`
+    with legacy as (
+      update ai_daily_usage set account_key = ${key}
+      where user_id = ${userId} and account_key is null returning day, calls, resorts
+    )
+    insert into ai_account_daily_usage (account_key, day, calls, resorts)
+    select ${key}, day, calls, resorts from legacy
+    on conflict (account_key, day) do update set
+      calls = ai_account_daily_usage.calls + excluded.calls,
+      resorts = ai_account_daily_usage.resorts + excluded.resorts`;
+  return key;
 }
 
 type WalletCheck = { expires: number; check: Promise<boolean> };
@@ -58,11 +78,12 @@ async function walletPaused(p: { baseURL: string; apiKey: string }): Promise<boo
 /** Reserve BEFORE every paid attempt, including retries and isolated injection checks. */
 export async function reserveCall(userId: string, p: { baseURL: string; apiKey: string }): Promise<void> {
   if (await walletPaused(p)) throw aiPaused();
+  const key = await accountUsageKey(userId);
   const [r] = await sql`
     with personal as (
-      insert into ai_daily_usage (user_id, day, calls) values (${userId}, (now() at time zone 'UTC')::date, 1)
-      on conflict (user_id, day) do update set calls = ai_daily_usage.calls + 1
-      where ai_daily_usage.calls < ${DAILY_CALLS} returning calls
+      insert into ai_account_daily_usage (account_key, day, calls) values (${key}, (now() at time zone 'UTC')::date, 1)
+      on conflict (account_key, day) do update set calls = ai_account_daily_usage.calls + 1
+      where ai_account_daily_usage.calls < ${DAILY_CALLS} returning calls
     ), shared as (
       insert into ai_daily_global (day, calls)
       select (now() at time zone 'UTC')::date, 1 from personal
@@ -74,9 +95,10 @@ export async function reserveCall(userId: string, p: { baseURL: string; apiKey: 
 }
 
 export async function reserveResort(userId: string): Promise<void> {
+  const key = await accountUsageKey(userId);
   const rows = await sql`
-    insert into ai_daily_usage (user_id, day, resorts) values (${userId}, (now() at time zone 'UTC')::date, 1)
-    on conflict (user_id, day) do update set resorts = ai_daily_usage.resorts + 1
-    where ai_daily_usage.resorts < ${DAILY_RESORTS} returning resorts`;
+    insert into ai_account_daily_usage (account_key, day, resorts) values (${key}, (now() at time zone 'UTC')::date, 1)
+    on conflict (account_key, day) do update set resorts = ai_account_daily_usage.resorts + 1
+    where ai_account_daily_usage.resorts < ${DAILY_RESORTS} returning resorts`;
   if (!rows.length) throw dailyLimit();
 }
