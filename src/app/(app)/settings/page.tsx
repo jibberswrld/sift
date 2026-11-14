@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SignOut, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -110,7 +111,7 @@ export default function SettingsPage() {
             <Trash size={18} /> Delete everything
           </h2>
           <p className="mt-1.5 text-[14px] leading-relaxed text-muted">
-            Permanently removes your messages, drafts and what you taught Sift. This can't be undone.
+            Permanently removes your messages, drafts and what you taught Sift, and disconnects Gmail, Outlook and Slack. This can't be undone.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <input
@@ -125,6 +126,10 @@ export default function SettingsPage() {
             </Button>
           </div>
         </section>
+        <p className="flex gap-4 border-t border-line pt-5 text-[13px] text-faint">
+          <Link href="/privacy" className="transition-colors hover:text-ink">Privacy</Link>
+          <Link href="/terms" className="transition-colors hover:text-ink">Terms</Link>
+        </p>
       </div>
     </Page>
   );
