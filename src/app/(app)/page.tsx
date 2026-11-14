@@ -125,14 +125,7 @@ export default function InboxPage() {
         {sync.error ? (
           <p role="alert" className="mx-3 mb-2 flex items-start gap-2 text-[13px] text-ink-2">
             <WarningCircle size={15} className="mt-px shrink-0 text-danger" />
-            <span>
-              {sync.error.message}
-              {sync.error.topUpUrl ? (
-                <a href={sync.error.topUpUrl} target="_blank" rel="noreferrer" className="ml-1.5 font-medium text-accent-text hover:underline">
-                  Top up
-                </a>
-              ) : null}
-            </span>
+            <span>{sync.error}</span>
           </p>
         ) : null}
         {body}
@@ -143,7 +136,7 @@ export default function InboxPage() {
 }
 
 function Row({ m }: { m: Message }) {
-  const { select, selectedId, setDone } = useInbox();
+  const { select, selectedId, setDone, sync } = useInbox();
   const reduce = useReducedMotion();
   const active = selectedId === m.id;
   return (
@@ -166,10 +159,18 @@ function Row({ m }: { m: Message }) {
         <SourceLogo source={m.source} size={13} className="opacity-90" />
         <span className="flex min-w-0 flex-col sm:contents">
           <span className={cx("truncate text-[14px] text-ink", m.needsReply ? "font-semibold" : "font-medium")}>{senderName(m.from)}</span>
-          <span className="min-w-0 truncate text-[14px]">
-            <span className="text-ink-2">{m.summary ?? m.subject ?? m.preview}</span>
-            {m.reason ? <span className="text-faint"> &nbsp;{m.reason}</span> : m.bucket ? null : <span className="text-faint"> &nbsp;Sorting…</span>}
-          </span>
+          {m.bucket || m.reason ? (
+            <span className="min-w-0 truncate text-[14px]">
+              <span className="text-ink-2">{m.summary ?? m.subject ?? m.preview}</span>
+              {m.reason ? <span className="text-faint"> &nbsp;{m.reason}</span> : null}
+            </span>
+          ) : (
+            // Unsorted: the status never gets truncated away on a narrow screen.
+            <span className="flex min-w-0 gap-2 text-[14px]">
+              <span className="truncate text-ink-2">{m.summary ?? m.subject ?? m.preview}</span>
+              <span className="shrink-0 text-faint">{sync.running ? "Sorting…" : "Not sorted yet"}</span>
+            </span>
+          )}
         </span>
         <span className="relative flex h-6 min-w-10 items-center justify-end">
           <span className="text-[12px] tabular-nums text-faint transition-opacity group-hover:opacity-0">{ago(m.receivedAt)}</span>
