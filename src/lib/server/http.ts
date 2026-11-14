@@ -28,7 +28,7 @@ export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response
       const req = args[0];
       if (req instanceof Request && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
         const origin = req.headers.get("origin");
-        if (origin !== null && origin !== new URL(req.url).origin) {
+        if (origin !== null && origin !== requestOrigin(req)) {
           throw new HttpError(403, "invalid_origin", "This request must come from Sift.");
         }
       }
@@ -62,4 +62,15 @@ export async function ndjson(events: AsyncGenerator<SyncEvent>): Promise<Respons
   return new Response(lines.join("\n") + "\n", {
     headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store, no-transform", "x-accel-buffering": "no" },
   });
+}
+
+/**
+ * The origin the browser asked for. req.url can carry the server's bind address (localhost) or an internal
+ * host behind a proxy, so the Host / X-Forwarded-* headers decide.
+ */
+export function requestOrigin(req: Request): string {
+  const url = new URL(req.url);
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0].trim() ?? url.protocol.slice(0, -1);
+  return host ? `${proto}://${host}` : url.origin;
 }
