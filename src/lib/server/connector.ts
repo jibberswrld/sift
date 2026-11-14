@@ -4,7 +4,8 @@ import { TOOLKIT_NAMES, type Toolkit } from "@/lib/types";
 import { HttpError } from "./http";
 import { installKey } from "./publik";
 
-const ORIGIN = (process.env.CONNECTOR_ORIGIN || "https://sift-connector.vercel.app").replace(/\/$/, "");
+// With COMPOSIO_API_KEY in .env.local (development), this same server is the connector.
+const ORIGIN = (process.env.CONNECTOR_ORIGIN || (process.env.COMPOSIO_API_KEY ? "http://127.0.0.1:3017" : "https://sift-connector.vercel.app")).replace(/\/$/, "");
 export const UNAVAILABLE = "Account connections aren't available right now. Try again in a moment.";
 
 export type ConnectorResult<T> =

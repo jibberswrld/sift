@@ -3,106 +3,54 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
-import { GearSix, Tray, Lightbulb, type Icon } from "@phosphor-icons/react";
-import { TOOLKIT_NAMES, TOOLKITS, type Toolkit } from "@/lib/types";
+import { GearSix, Lightbulb } from "@phosphor-icons/react";
 import { Wordmark } from "../brand";
 import { cx } from "../ui";
 import { api } from "./api";
-import { SourceLogo } from "./bits";
+import { ago } from "./bits";
 import { useInbox } from "./inbox";
 
-const NAV: { href: string; label: string; icon: Icon }[] = [
-  { href: "/", label: "Inbox", icon: Tray },
-  { href: "/teach", label: "What matters", icon: Lightbulb },
-];
-
-const navCls = "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[14px] font-medium transition-colors duration-150";
-
-function AccountRow({ t }: { t: Toolkit }) {
-  const { connections: c, linking, connect } = useInbox();
-  const on = !!c?.connected[t];
-  return (
-    <li className="flex h-8 items-center gap-2.5 px-2.5 text-[14px] text-ink-2">
-      <SourceLogo source={t} size={14} />
-      <span className="font-medium">{TOOLKIT_NAMES[t]}</span>
-      {on ? (
-        <span className="ml-auto size-1.5 rounded-full bg-ok" aria-label="Connected" />
-      ) : (
-        <button
-          onClick={() => void connect(t)}
-          disabled={!c || !c.available || !!linking}
-          className="ml-auto rounded-md px-1.5 py-0.5 text-[12.5px] font-medium text-accent-text transition-colors hover:bg-accent-soft disabled:text-faint disabled:hover:bg-transparent"
-        >
-          {linking === t ? "Waiting…" : "Connect"}
-        </button>
-      )}
-    </li>
-  );
-}
-
+/** One quiet top bar. The inbox page puts its pile tabs in it; everything else is two icons. */
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const { messages } = useInbox();
-  const important = messages?.filter((m) => m.bucket === "important").length ?? 0;
+  const { sync, lastSyncAt, runSync } = useInbox();
   usePublikPresence();
 
-  const isActive = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
+  const icon = (href: string, label: string, Icon: typeof GearSix) => (
+    <Link
+      href={href}
+      aria-label={label}
+      title={label}
+      aria-current={path.startsWith(href) ? "page" : undefined}
+      className={cx(
+        "inline-flex size-8 items-center justify-center rounded-lg transition-colors duration-150",
+        path.startsWith(href) ? "bg-ink/[0.07] text-ink" : "text-muted hover:bg-ink/[0.05] hover:text-ink",
+      )}
+    >
+      <Icon size={17} weight={path.startsWith(href) ? "fill" : "regular"} />
+    </Link>
+  );
 
   return (
-    <div className="min-h-[100dvh] lg:grid lg:grid-cols-[224px_1fr]">
-      <aside className="sticky top-0 hidden h-[100dvh] flex-col border-r border-line bg-sidebar px-3 py-5 lg:flex">
-        <Wordmark className="px-2.5" />
-        <nav className="mt-7 space-y-px" aria-label="Main">
-          {NAV.map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              aria-current={isActive(n.href) ? "page" : undefined}
-              className={cx(navCls, isActive(n.href) ? "bg-ink/[0.065] text-ink" : "text-ink-2 hover:bg-ink/[0.04] hover:text-ink")}
-            >
-              <n.icon size={16} weight={isActive(n.href) ? "fill" : "regular"} />
-              {n.label}
-              {n.href === "/" && important ? <span className="ml-auto text-[12px] tabular-nums text-accent-text">{important}</span> : null}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="mt-8 px-2.5 text-[11.5px] font-medium uppercase tracking-[0.06em] text-faint">Accounts</div>
-        <ul className="mt-1.5">
-          {TOOLKITS.map((t) => (
-            <AccountRow key={t} t={t} />
-          ))}
-        </ul>
-
-        <div className="mt-auto">
-          <Link
-            href="/settings"
-            aria-current={isActive("/settings") ? "page" : undefined}
-            className={cx(navCls, isActive("/settings") ? "bg-ink/[0.065] text-ink" : "text-ink-2 hover:bg-ink/[0.04] hover:text-ink")}
+    <div className="min-h-[100dvh]">
+      <header className="sticky top-0 z-30 border-b border-line bg-bg/90 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4 sm:px-6">
+          <Wordmark />
+          <span className="flex-1" />
+          <button
+            onClick={() => void runSync()}
+            disabled={!!sync.running}
+            className="hidden items-center gap-2 rounded-lg px-2 py-1 text-[12.5px] tabular-nums text-faint transition-colors hover:text-ink disabled:hover:text-faint sm:inline-flex"
+            title="Check for new messages"
           >
-            <GearSix size={16} />
-            Settings
-          </Link>
+            <span className={cx("size-1.5 rounded-full", sync.running ? "animate-pulse bg-accent-text" : "bg-ok/70")} aria-hidden />
+            {sync.running ? `${sync.step ?? "Checking"}…` : lastSyncAt ? `Checked ${ago(lastSyncAt) === "now" ? "just now" : `${ago(lastSyncAt)} ago`}` : "Check now"}
+          </button>
+          {icon("/teach", "What matters to you", Lightbulb)}
+          {icon("/settings", "Settings", GearSix)}
         </div>
-      </aside>
-
-      <div className="min-w-0">
-        <header className="sticky top-0 z-20 flex h-13 items-center gap-1 border-b border-line bg-bg/90 px-4 backdrop-blur-md lg:hidden">
-          <Wordmark className="mr-auto" />
-          {[...NAV, { href: "/settings", label: "Settings", icon: GearSix }].map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              aria-label={n.label}
-              aria-current={isActive(n.href) ? "page" : undefined}
-              className={cx("inline-flex size-9 items-center justify-center rounded-lg", isActive(n.href) ? "bg-ink/[0.065] text-ink" : "text-muted")}
-            >
-              <n.icon size={19} weight={isActive(n.href) ? "fill" : "regular"} />
-            </Link>
-          ))}
-        </header>
-        {children}
-      </div>
+      </header>
+      {children}
     </div>
   );
 }

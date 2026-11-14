@@ -1,25 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowSquareOut, Key, Plugs, ShieldCheck, SignOut, Trash, Wallet } from "@phosphor-icons/react";
+import { ArrowSquareOut, Key, SignOut, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { TOOLKIT_NAMES, TOOLKITS, type GateInfo, type Me, type Toolkit } from "@/lib/types";
 import { api, ApiFailure } from "@/components/app/api";
 import { OwnKeyForm } from "@/components/app/gate";
-import { Page, PageHeader } from "@/components/app/page-header";
+import { Page } from "@/components/app/page-header";
 import { useInbox } from "@/components/app/inbox";
 import { Button, Chip, Skeleton } from "@/components/ui";
 
-function Row({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+function Row({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-      <div className="flex gap-3.5">
-        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-ink-2">{icon}</span>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[15.5px] font-semibold">{title}</h2>
-          <div className="mt-1.5 text-[14px] leading-relaxed text-muted">{children}</div>
-        </div>
-      </div>
+    <section className="grid gap-2 border-b border-line py-7 sm:grid-cols-[200px_1fr] sm:gap-8">
+      <h2 className="text-[14px] font-medium text-ink">{title}</h2>
+      <div className="min-w-0 text-[14px] leading-relaxed text-muted">{children}</div>
     </section>
   );
 }
@@ -77,9 +72,9 @@ export default function SettingsPage() {
 
   return (
     <Page>
-      <PageHeader title="Settings" />
-      <div className="mt-8 space-y-4">
-        <Row icon={<ShieldCheck size={18} />} title="Account">
+      <h1 className="font-serif text-[30px] leading-tight tracking-[-0.015em]">Settings</h1>
+      <div className="mt-4">
+        <Row title="Account">
           {me ? (
             <p>
               Signed in with publik{me.handle ? <> as <span className="font-medium text-ink">@{me.handle}</span></> : null}.
@@ -92,7 +87,7 @@ export default function SettingsPage() {
           </Button>
         </Row>
 
-        <Row icon={<Wallet size={18} />} title="How AI is paid for">
+        <Row title="How AI is paid for">
           {me ? (
             <>
               <p>
@@ -131,7 +126,7 @@ export default function SettingsPage() {
           )}
         </Row>
 
-        <Row icon={<Plugs size={18} />} title="Connected accounts">
+        <Row title="Connected accounts">
           <p>Connections go through Composio. Sift only reads when it checks your inbox, and only writes a reply you confirmed.</p>
           <ul className="mt-3 divide-y divide-line border-y border-line">
             {TOOLKITS.map((t) => {
@@ -159,7 +154,7 @@ export default function SettingsPage() {
           {work.connections && !work.connections.available ? <p className="mt-3 text-[13px] text-warn">{work.connections.message}</p> : null}
         </Row>
 
-        <Row icon={<ShieldCheck size={18} />} title="What Sift can and can't do">
+        <Row title="What Sift can and can't do">
           <ul className="list-disc space-y-1 pl-5">
             <li>It reads new messages from the accounts you connect, each time it checks.</li>
             <li>It sends a reply only when you press Send and confirm. It never deletes, archives or changes anything in your accounts. &ldquo;Done&rdquo; only hides a message in Sift.</li>
@@ -168,7 +163,7 @@ export default function SettingsPage() {
           </ul>
         </Row>
 
-        <section className="rounded-xl border border-danger/25 bg-surface p-5 sm:p-6">
+        <section className="py-7">
           <h2 className="flex items-center gap-2 text-[15.5px] font-semibold text-danger">
             <Trash size={18} /> Delete everything
           </h2>
