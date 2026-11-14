@@ -25,6 +25,24 @@ create table if not exists sessions (
   created_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now()
 );
+
+-- Additive upgrades for databases that already have the original users table.
+alter table users add column if not exists ai_lock_token text;
+alter table users add column if not exists ai_lock_until timestamptz;
+alter table users add column if not exists sync_pending jsonb not null default '{}'::jsonb;
+
+create table if not exists ai_daily_usage (
+  user_id uuid not null references users(id) on delete cascade,
+  day date not null,
+  calls integer not null default 0,
+  resorts integer not null default 0,
+  primary key (user_id, day)
+);
+
+create table if not exists ai_daily_global (
+  day date primary key,
+  calls integer not null default 0
+);
 create index if not exists sessions_user_idx on sessions(user_id);
 
 create table if not exists messages (

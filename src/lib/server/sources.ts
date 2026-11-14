@@ -15,7 +15,8 @@ export interface Incoming {
   url: string | null;
 }
 
-export const MAX_PER_SOURCE = 25;
+export const MAX_PER_SOURCE = 150;
+const PAGE_SIZE = 25;
 const BODY_LIMIT = 8_000;
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", "#39": "'" };
 
@@ -40,16 +41,28 @@ const date = (v: unknown) => {
   return Number.isNaN(d.getTime()) ? new Date() : d;
 };
 
-type Fetched = ConnectorResult<Incoming[]>;
+type Fetched = ConnectorResult<{ messages: Incoming[]; cursor: string | null }>;
 
-async function gmail(user: Row, since: Date): Promise<Fetched> {
-  const query = `in:inbox after:${Math.floor(since.getTime() / 1000)}`;
-  const r = await connectorRun(user, "GMAIL_FETCH_EMAILS", { query, max_results: MAX_PER_SOURCE, include_payload: true, verbose: true });
-  if (!r.ok) return r;
-  const raw = Array.isArray(r.data.data?.messages) ? (r.data.data.messages as Obj[]) : [];
+// Persist the continuation at the ceiling: an oldest-message watermark alone would
+// keep fetching the same newest messages and never drain a large backlog.
+export interface SyncPage { since: string; until: string; cursor: string }
+
+async function gmail(user: Row, since: Date, until: Date, cursor = ""): Promise<Fetched> {
+  const query = `in:inbox after:${Math.floor(since.getTime() / 1000)} before:${Math.ceil(until.getTime() / 1000)}`;
+  const raw: Obj[] = [];
+  let pages = 0;
+  do {
+    pages++;
+    const r = await connectorRun(user, "GMAIL_FETCH_EMAILS", { query, max_results: PAGE_SIZE, include_payload: true, verbose: true, ...(cursor ? { page_token: cursor } : {}) });
+    if (!r.ok) return r;
+    raw.push(...(Array.isArray(r.data.data?.messages) ? r.data.data.messages as Obj[] : []));
+    const next = str(r.data.data?.nextPageToken);
+    if (next && next === cursor) throw new Error("Gmail repeated its pagination token.");
+    cursor = next;
+  } while (cursor && raw.length < MAX_PER_SOURCE && pages < MAX_PER_SOURCE / PAGE_SIZE);
   return {
     ok: true,
-    data: raw.filter((m) => str(m.messageId)).map((m) => ({
+    data: { cursor: cursor || null, messages: raw.filter((m) => str(m.messageId)).map((m) => ({
       source: "gmail" as const,
       externalId: str(m.messageId),
       threadId: str(m.threadId) || null,
@@ -58,22 +71,31 @@ async function gmail(user: Row, since: Date): Promise<Fetched> {
       body: plainText(str(m.messageText)) || str(obj(m.preview).body),
       receivedAt: date(m.messageTimestamp),
       url: str(m.display_url) || null,
-    })),
+    })) },
   };
 }
 
-async function outlook(user: Row, since: Date): Promise<Fetched> {
-  const r = await connectorRun(user, "OUTLOOK_LIST_MESSAGES", {
-    folder: "inbox",
-    top: MAX_PER_SOURCE,
-    received_date_time_gt: since.toISOString(),
-    select: ["id", "subject", "from", "receivedDateTime", "body", "bodyPreview", "conversationId", "webLink"],
-  });
-  if (!r.ok) return r;
-  const raw = Array.isArray(r.data.data?.value) ? (r.data.data.value as Obj[]) : [];
+async function outlook(user: Row, since: Date, until: Date, cursor = ""): Promise<Fetched> {
+  const raw: Obj[] = [];
+  let pages = 0;
+  do {
+    pages++;
+    const r = await connectorRun(user, "OUTLOOK_LIST_MESSAGES", {
+      folder: "inbox", top: PAGE_SIZE,
+      filter: `receivedDateTime gt ${since.toISOString()} and receivedDateTime lt ${until.toISOString()}`,
+      select: ["id", "subject", "from", "receivedDateTime", "body", "bodyPreview", "conversationId", "webLink"],
+      ...(cursor ? { page_token: cursor } : {}),
+    });
+    if (!r.ok) return r;
+    raw.push(...(Array.isArray(r.data.data?.value) ? r.data.data.value as Obj[] : []));
+    // Composio's opaque token carries Graph's nextLink. Older results expose the link directly.
+    const next = str(r.data.data?.next_page_token) || str(r.data.data?.["@odata.nextLink"]);
+    if (next && next === cursor) throw new Error("Outlook repeated its pagination token.");
+    cursor = next;
+  } while (cursor && raw.length < MAX_PER_SOURCE && pages < MAX_PER_SOURCE / PAGE_SIZE);
   return {
     ok: true,
-    data: raw.filter((m) => str(m.id)).map((m) => {
+    data: { cursor: cursor || null, messages: raw.filter((m) => str(m.id)).map((m) => {
       const from = obj(obj(m.from).emailAddress);
       const name = str(from.name), address = str(from.address);
       return {
@@ -86,20 +108,32 @@ async function outlook(user: Row, since: Date): Promise<Fetched> {
         receivedAt: date(m.receivedDateTime),
         url: str(m.webLink) || null,
       };
-    }),
+    }) },
   };
 }
 
-async function slack(user: Row, since: Date): Promise<Fetched> {
-  // Slack's after: is a whole UTC day and exclusive, so ask from the day before and filter by ts below.
+async function slack(user: Row, since: Date, until: Date, cursor = "1"): Promise<Fetched> {
+  // Slack date search is day-grained; filter exact timestamps below.
   const day = new Date(since.getTime() - 86_400_000).toISOString().slice(0, 10);
-  const r = await connectorRun(user, "SLACK_SEARCH_MESSAGES", { query: `after:${day}`, sort: "timestamp", sort_dir: "desc", count: MAX_PER_SOURCE });
-  if (!r.ok) return r;
-  const raw = Array.isArray(obj(r.data.data?.messages).matches) ? (obj(r.data.data?.messages).matches as Obj[]) : [];
+  const endDay = new Date(until.getTime() + 86_400_000).toISOString().slice(0, 10);
+  const raw: Obj[] = [];
+  let page = Number(cursor) || 1;
+  let more = false;
+  let pages = 0;
+  do {
+    pages++;
+    const r = await connectorRun(user, "SLACK_SEARCH_MESSAGES", { query: `after:${day} before:${endDay}`, sort: "timestamp", sort_dir: "desc", count: PAGE_SIZE, page });
+    if (!r.ok) return r;
+    const messages = obj(r.data.data?.messages);
+    const matches = Array.isArray(messages.matches) ? messages.matches as Obj[] : [];
+    raw.push(...matches);
+    more = page * PAGE_SIZE < Number(messages.total ?? obj(messages.paging).total ?? 0);
+    page++;
+  } while (more && raw.length < MAX_PER_SOURCE && pages < MAX_PER_SOURCE / PAGE_SIZE);
   return {
     ok: true,
-    data: raw
-      .filter((m) => str(m.ts) && str(m.text) && Number(m.ts) * 1000 > since.getTime())
+    data: { cursor: more ? String(page) : null, messages: raw
+      .filter((m) => str(m.ts) && str(m.text) && Number(m.ts) * 1000 > since.getTime() && Number(m.ts) * 1000 <= until.getTime())
       .map((m) => {
         const channel = obj(m.channel);
         const where = str(channel.name);
@@ -113,15 +147,23 @@ async function slack(user: Row, since: Date): Promise<Fetched> {
           receivedAt: new Date(Number(m.ts) * 1000),
           url: str(m.permalink) || null,
         };
-      }),
+      }) },
   };
 }
 
-export const FETCH: Record<Toolkit, (user: Row, since: Date) => Promise<Fetched>> = { gmail, outlook, slack };
+export const FETCH: Record<Toolkit, (user: Row, since: Date, until: Date, cursor?: string) => Promise<Fetched>> = { gmail, outlook, slack };
 
 /** The address inside "Name <a@b.co>" or a bare "a@b.co"; null for a name with no address. */
 export function emailAddress(s: string | null | undefined): string | null {
-  return /[^\s<>@,;:"'()]+@[^\s<>@,;:"'()]+\.[^\s<>@,;:"'()]+/.exec(s ?? "")?.[0] ?? null;
+  const header = s ?? "";
+  const brackets = /<([^<>]*)>/.exec(header);
+  const address = /[^\s<>@,;:"'()]+@[^\s<>@,;:"'()]+\.[^\s<>@,;:"'()]+/;
+  if (header.includes("<") || header.includes(">")) {
+    // Invalid angle addresses must not fall back to a spoofed display name.
+    const inner = brackets?.[1].trim() ?? "";
+    return address.exec(inner)?.[0] === inner && inner ? inner : null;
+  }
+  return address.exec(header)?.[0] ?? null;
 }
 
 /** The reply call for an email message. Slack replies happen in Slack. */

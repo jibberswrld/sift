@@ -96,8 +96,17 @@ export async function connectorDisconnect(user: Row, toolkit: Toolkit): Promise<
   try {
     const c = await session(user);
     if (!c) return fail("unavailable", "not_configured", "Account connections aren't switched on yet.");
-    const { items } = await c.composio.connectedAccounts.list({ userIds: [composioUser(user)], toolkitSlugs: [toolkit] });
-    for (const account of items) await c.composio.connectedAccounts.delete(account.id);
+    const accounts: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await c.composio.connectedAccounts.list({ userIds: [composioUser(user)], toolkitSlugs: [toolkit], limit: 100, cursor });
+      accounts.push(...page.items.map((account) => account.id));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    for (const id of accounts) {
+      const result = await c.composio.connectedAccounts.delete(id);
+      if (!result.success) return fail("error", "disconnect_failed", `${TOOLKIT_NAMES[toolkit]} could not be disconnected. Please try again.`);
+    }
     return { ok: true, data: { ok: true } };
   } catch (e) {
     return upstream(e);

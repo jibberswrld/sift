@@ -5,6 +5,11 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 
+// Validate when the server module is initialized, before any local filesystem fallback.
+if (process.env.VERCEL && (!process.env.APP_SECRET || process.env.APP_SECRET.length < 32)) {
+  throw new Error("Sift requires APP_SECRET with at least 32 characters on Vercel. Set it before starting the server.");
+}
+
 /** SIFT_DATA_DIR overrides (tests). */
 export function dataDir(): string {
   const os = platform();
