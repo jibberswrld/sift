@@ -71,10 +71,13 @@ async function signIn(handle) {
     return { status: res.status, body: ndjson ? text.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : JSON.parse(text) };
   };
   // The install is created by the Sign in click (POST), not by loading the gate.
-  const gate = await call("/api/gate", "POST");
+  const gate = await call("/api/gate", "POST", undefined, { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/130.0 Safari/537.36" });
   assert.equal(gate.body.state, "sign_in");
+  assert.deepEqual((await json(`${publik}/mock/stats`)).body.registrations.at(-1), { os: "macos", device_name: "Chrome on macOS", hasArch: false });
   await fetch(`${gate.body.claimUrl}?handle=${handle}`);
   assert.equal((await call("/api/gate")).body.state, "ready");
+  await call("/api/publik/opened", "POST");
+  assert.deepEqual((await json(`${publik}/mock/stats`)).body.telemetry.at(-1), { os: "macos", hasArch: false });
   return call;
 }
 async function connect(call, toolkit) {

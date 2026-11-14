@@ -5,7 +5,7 @@
 // events (POST /api/v1/telemetry) go out with that person's key and no content, so each signed-in person counts once.
 // AI calls are paid by the developer's fellowship credits (PUBLIK_CREDITS_KEY), so people never have to pick a plan.
 import { randomUUID } from "node:crypto";
-import { arch } from "node:os";
+import type { PublikOS } from "./visitor";
 import pkg from "../../../package.json";
 
 export const APP_SLUG = "sift";
@@ -16,8 +16,6 @@ export const ORIGIN = process.env.PUBLIK_ORIGIN || "https://publikhq.com"; // PU
 export const DEFAULT_BASE_URL = `${ORIGIN}/api/v1`;
 /** Ask for a tier, never a vendor model name. */
 export const MODELS = { fast: "publik-fast", balanced: "publik-balanced", smart: "publik-smart" } as const;
-const OS = "linux"; // the server's OS: this is a hosted app
-const ARCH = arch() === "arm64" || arch() === "x64" ? { arch: arch() } : {};
 
 export interface Wallet {
   claim_state: "anonymous" | "claimed";
@@ -45,7 +43,7 @@ function isOffline(e: unknown): boolean {
 }
 
 /** POST /api/v1/installs: a publik key for one browser session. Throws a readable message. */
-export async function provision(installId: string): Promise<Installed> {
+export async function provision(installId: string, os: PublikOS, deviceName: string): Promise<Installed> {
   for (let attempt = 0; attempt < 2; attempt++) {
     let res: Response;
     try {
@@ -54,8 +52,8 @@ export async function provision(installId: string): Promise<Installed> {
         headers: { "content-type": "application/json" },
         signal: AbortSignal.timeout(20_000),
         body: JSON.stringify({
-          app_token: appToken(), app_slug: APP_SLUG, app_version: APP_VERSION, os: OS, ...ARCH,
-          device_name: "Web browser", install_id: installId, disclosure_version: 1, dialects: ["chat_completions"],
+          app_token: appToken(), app_slug: APP_SLUG, app_version: APP_VERSION, os,
+          device_name: deviceName.slice(0, 120), install_id: installId, disclosure_version: 1, dialects: ["chat_completions"],
         }),
       });
     } catch (e) {
@@ -104,10 +102,10 @@ function usageOff(): boolean {
 }
 
 /** POST /api/v1/telemetry with this person's key and no content. Never throws. */
-export async function sendEvent(event: "app_opened" | "active_session", s: { key: string; installId: string }): Promise<number | null> {
+export async function sendEvent(event: "app_opened" | "active_session", s: { key: string; installId: string; os?: PublikOS }): Promise<number | null> {
   if (usageOff()) return null;
   try {
-    const body = { v: 1, app: APP_SLUG, install_id: s.installId.toLowerCase(), event, app_version: APP_VERSION.replace(/^v/i, ""), os: OS, ...ARCH };
+    const body = { v: 1, app: APP_SLUG, install_id: s.installId.toLowerCase(), event, app_version: APP_VERSION.replace(/^v/i, ""), os: s.os ?? "linux" };
     const res = await fetch(process.env.PUBLIK_TELEMETRY_URL || `${ORIGIN}/api/v1/telemetry`, {
       method: "POST", signal: AbortSignal.timeout(5_000),
       headers: { "content-type": "application/json", authorization: `Bearer ${s.key}` },
