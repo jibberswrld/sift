@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+import { osFromUA, deviceName } from "./visitor";
 import type { GateInfo } from "@/lib/types";
 import { encrypt } from "./crypto";
 import { sql, type Row } from "./db";
@@ -13,9 +15,11 @@ function info(state: GateInfo["state"], w: Wallet | null, extra: Partial<GateInf
 async function ensureKey(s: Row): Promise<string> {
   const existing = sessionKey(s);
   if (existing) return existing;
-  const inst = await provision(s.install_id);
+  const ua = (await headers()).get("user-agent") ?? "";
+  s.os = osFromUA(ua);
+  const inst = await provision(s.install_id, s.os, deviceName(ua));
   s.claim_url = inst.claim_url;
-  await sql`update sessions set publik_key_enc = ${encrypt(inst.key)}, install_id = ${inst.install_id}, claim_url = ${inst.claim_url} where id = ${s.id}`;
+  await sql`update sessions set os = ${s.os}, publik_key_enc = ${encrypt(inst.key)}, install_id = ${inst.install_id}, claim_url = ${inst.claim_url} where id = ${s.id}`;
   return inst.key;
 }
 

@@ -18,6 +18,8 @@ let spent = 0;
 let dailyCap = 200_000_000;
 let walletUnavailable = false;
 let chats = [];
+const registrations = [];
+const telemetry = [];
 let failBatch = false;
 let pauseBatch = false;
 let malformed = false;
@@ -48,6 +50,7 @@ createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/v1/installs") {
       const b = JSON.parse(await readBody(req));
       if (!String(b.app_token || "").startsWith("pat_")) return send(res, 401, { error: { type: "invalid_token", message: "Unknown app token." } });
+      registrations.push({ os: b.os, device_name: b.device_name, hasArch: "arch" in b });
       const id = b.install_id;
       let inst = installs.get(id);
       if (inst) return send(res, 200, { install_id: id, base_url: `${ORIGIN}/api/v1`, claim_url: `${ORIGIN}/claim/${id}` }); // no key on repeat, like publik
@@ -67,7 +70,7 @@ createServer(async (req, res) => {
       res.writeHead(200, { "content-type": "text/html" });
       return res.end(`<!doctype html><title>mock publik</title><p>Signed in to mock publik as @${inst.handle}. You can close this tab.</p>`);
     }
-    if (req.method === "GET" && url.pathname === "/mock/stats") return send(res, 200, { chats });
+    if (req.method === "GET" && url.pathname === "/mock/stats") return send(res, 200, { chats, registrations, telemetry });
     if (req.method === "GET" && url.pathname === "/mock/control") {
       if (url.searchParams.has("spent")) spent = Number(url.searchParams.get("spent"));
       if (url.searchParams.has("cap")) dailyCap = Number(url.searchParams.get("cap"));
@@ -98,6 +101,7 @@ createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/v1/telemetry") {
       const b = JSON.parse(await readBody(req));
+      telemetry.push({ os: b.os, hasArch: "arch" in b });
       console.log(`[mock] telemetry ${b.event} app=${b.app} install=${b.install_id} auth=${auth(req) ? "yes" : "no"}`);
       return send(res, 202, { ok: true });
     }

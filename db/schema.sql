@@ -108,3 +108,5 @@ create table if not exists events (
   created_at timestamptz not null default now()
 );
 create index if not exists events_name_time_idx on events(name, created_at);
+
+alter table sessions add column if not exists os text;
