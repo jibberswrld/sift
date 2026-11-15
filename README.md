@@ -1,8 +1,10 @@
+<img src="docs/img/logo.png" alt="Sift" width="96" height="96" />
+
 # Sift
 
-![Sift: every inbox, sorted by what needs you](https://sift-nu-ebon.vercel.app/readme/hero.jpg)
-
 **Gmail, Outlook and Slack in one inbox, sorted by what needs you.**
+
+![Sift: the Needs you pile with one-line summaries, and a message from a counselor open with the reason it was sorted there and an AI reply draft](docs/img/hero.png)
 
 Open Sift and it reads everything new from the accounts you connect, then puts each message where it belongs. What needs you comes first. Each message gets a one-line summary and a short note on *why* it's there, so you can trust the sort without opening anything.
 
@@ -14,7 +16,7 @@ It's free, it runs in your browser, and there's nothing to install. Sign in with
 - **Worth a look**: updates, receipts, shipping, announcements, friendly catch-ups that ask for nothing.
 - **Low priority**: newsletters, promotions, social notifications, bot chatter.
 
-![The inbox: one line per message, with the reason it's there in grey](https://sift-nu-ebon.vercel.app/readme/inbox.jpg)
+![The Needs you pile: six messages from Gmail, Outlook and Slack, each with a one-line summary and, in grey, the reason it is there](public/readme/inbox.jpg)
 
 ## It tells you why
 
@@ -22,7 +24,7 @@ Open a message and the reason is right at the top. Messages from people waiting 
 
 Sift drafts a reply from what's in the message. Where only you know the answer, like a link, a time or a yes or no, it leaves a **[blank]** instead of guessing. Nothing is sent until you press **Send** and confirm. Gmail and Outlook replies go out from your own account, in the original thread.
 
-![A message open next to the inbox, with the reason, and an AI draft that leaves blanks for what only you know](https://sift-nu-ebon.vercel.app/readme/reader.jpg)
+![A message open next to the inbox, with the reason, and an AI draft that leaves blanks for what only you know](public/readme/reader.jpg)
 
 ## Teach it what matters
 
@@ -30,16 +32,13 @@ Write it the way you'd tell a friend who was checking your messages for you: *"I
 
 Every time you move a message to another pile, Sift remembers it, along with your reason if you give one, and treats similar messages the same way. You can see everything it has learned, and remove anything it got wrong.
 
-![What matters: your own words, and the corrections Sift has learned](https://sift-nu-ebon.vercel.app/readme/teach.jpg)
+![The What matters to you page: three sentences in the person's own words, and two corrections Sift has learned, each with the note they gave](public/readme/teach.jpg)
 
-## Light, dark and phone-sized
+## Light and dark
 
-Sift follows your system theme and works on any screen. `j` / `k` move through the list, `e` marks a message done, `Esc` closes it.
+Sift follows your system theme. `j` / `k` move through the list, `e` marks a message done, `Esc` closes it.
 
-<p>
-  <img src="https://sift-nu-ebon.vercel.app/readme/inbox-dark.jpg" alt="Sift in dark mode" width="68%">
-  <img src="https://sift-nu-ebon.vercel.app/readme/mobile.jpg" alt="Sift at phone size" width="28%">
-</p>
+![Sift in dark mode: the Low priority pile with a phishing email open, flagged because it tried to give the AI instructions, which Sift ignored](public/readme/dark.jpg)
 
 ## Built to be trusted
 
