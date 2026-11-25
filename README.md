@@ -1,3 +1,5 @@
+![What Sift does: messages from Gmail, Outlook and Slack go in, and Sift sorts them into three piles (Needs you, Worth a look, Low priority) with a one-line summary and the reason for each](public/readme/explainer.jpg)
+
 ![Sift: the Needs you pile with one-line summaries, and a message from a counselor open with the reason it was sorted there and an AI reply draft](https://sift-nu-ebon.vercel.app/readme/hero.jpg)
 
 <img src="https://sift-nu-ebon.vercel.app/apple-icon.png" alt="Sift" width="96" height="96" />
